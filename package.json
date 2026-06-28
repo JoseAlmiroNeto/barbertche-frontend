@@ -1,0 +1,37 @@
+{
+  "name": "barbertche",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "start:clear": "expo start -c",
+    "android": "expo run:android",
+    "android:metro": "expo start -c",
+    "android:open": "expo start --android -c",
+    "build:android:apk": "cd android && gradlew.bat assembleRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64",
+    "build:android:apk:fresh": "expo prebuild --platform android && powershell.exe -ExecutionPolicy Bypass -File scripts/prepare-android-assets.ps1 && cd android && gradlew.bat assembleRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "~14.0.4",
+    "@react-native-community/datetimepicker": "8.2.0",
+    "expo": "~52.0.0",
+    "expo-asset": "~11.0.5",
+    "expo-font": "~13.0.4",
+    "expo-image-picker": "~16.0.6",
+    "expo-splash-screen": "~0.29.24",
+    "expo-status-bar": "~2.0.0",
+    "lucide-react-native": "^1.21.0",
+    "react": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-safe-area-context": "4.12.0",
+    "react-native-svg": "15.8.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.12",
+    "typescript": "^5.3.3"
+  }
+}
