@@ -1,6 +1,6 @@
-import { StatusBar } from "expo-status-bar";
-import React, { useMemo, useState } from "react";
-import { Alert, View } from "react-native";
+﻿import { StatusBar } from "expo-status-bar";
+import React, { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Header } from "./src/components/common";
 import { businessHours as initialBusinessHours, closedDates as initialClosedDates, initialAppointments, initialBlocks, initialClients, initialGallery, initialProducts, initialRecurring, initialServices } from "./src/data/mockData";
@@ -30,6 +30,7 @@ import {
   updateService as updateServiceRequest
 } from "./src/services/adminApi";
 import { apiRequest, type AuthResponse } from "./src/services/api";
+import { clearStoredAuthToken, getStoredAuthToken, storeAuthToken } from "./src/services/authStorage";
 import { loadAppData, type AppData } from "./src/services/appData";
 import { styles } from "./src/theme";
 import type { AdminTab, Appointment, BusinessHours, ClientTab, GalleryItem, Product, RecurringBooking, Role, Service } from "./src/types";
@@ -39,6 +40,8 @@ import { canUseSlot, getAvailableSlots, getBookingsForDate, serviceById } from "
 
 export default function App() {
   const [logged, setLogged] = useState(false);
+  const [authInitializing, setAuthInitializing] = useState(true);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [role, setRole] = useState<Role>("client");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [clientTab, setClientTab] = useState<ClientTab>("home");
@@ -65,6 +68,10 @@ export default function App() {
   const currentClient = clients.find((client) => client.id === authClientId) ?? clients[0];
   const selectedService = serviceById(services, selectedServiceId);
   const dateOptions = useMemo(() => Array.from({ length: 10 }, (_, index) => isoForOffset(index)), []);
+
+  useEffect(() => {
+    void restoreStoredSession();
+  }, []);
 
   const bookingsForSelectedDate = readBookingsForDate(selectedDate);
   const availableSlots = readAvailableSlots(selectedDate, selectedService);
@@ -115,7 +122,7 @@ export default function App() {
     const service = serviceById(services, serviceId);
     const client = currentClient;
     if (!manualClient && !client) {
-      notify("Cliente não encontrado", "Entre novamente para agendar.");
+      notify("Cliente nÃ£o encontrado", "Entre novamente para agendar.");
       return;
     }
 
@@ -149,7 +156,7 @@ export default function App() {
     try {
       await deleteAppointmentRequest(token, id);
       setAppointments((current) => current.filter((appointment) => appointment.id !== id));
-      notify("Agendamento cancelado", "O horário foi removido da agenda.");
+      notify("Agendamento cancelado", "O horÃ¡rio foi removido da agenda.");
     } catch (error) {
       notify("Erro ao cancelar", error instanceof Error ? error.message : "Nao foi possivel cancelar o agendamento.");
     }
@@ -203,9 +210,9 @@ export default function App() {
       const end = addMinutes(start, duration);
       const block = await createManualBlockRequest(token, { date: selectedDate, start, end, reason });
       setBlocks((current) => [...current, block]);
-      notify("Horário bloqueado", "O bloqueio foi salvo na agenda.");
+      notify("HorÃ¡rio bloqueado", "O bloqueio foi salvo na agenda.");
     } catch (error) {
-      notify("Erro ao bloquear", error instanceof Error ? error.message : "Nao foi possivel bloquear o horário.");
+      notify("Erro ao bloquear", error instanceof Error ? error.message : "Nao foi possivel bloquear o horÃ¡rio.");
     }
   }
 
@@ -239,7 +246,7 @@ export default function App() {
         active: true
       });
       setRecurring((current) => [...current, created]);
-      notify("Agendamento fixo criado", "O horário semanal foi salvo.");
+      notify("Agendamento fixo criado", "O horÃ¡rio semanal foi salvo.");
     } catch (error) {
       notify("Erro ao criar fixo", error instanceof Error ? error.message : "Nao foi possivel criar o agendamento fixo.");
     }
@@ -254,7 +261,7 @@ export default function App() {
     try {
       const updated = await updateRecurringBookingRequest(token, id, payload);
       setRecurring((current) => current.map((item) => item.id === id ? updated : item));
-      notify("Agendamento fixo atualizado", "O horário semanal foi salvo.");
+      notify("Agendamento fixo atualizado", "O horÃ¡rio semanal foi salvo.");
     } catch (error) {
       notify("Erro ao editar fixo", error instanceof Error ? error.message : "Nao foi possivel editar o agendamento fixo.");
     }
@@ -269,7 +276,7 @@ export default function App() {
     try {
       await deleteRecurringBookingRequest(token, id);
       setRecurring((current) => current.filter((item) => item.id !== id));
-      notify("Agendamento fixo excluído", "O horário semanal foi removido.");
+      notify("Agendamento fixo excluÃ­do", "O horÃ¡rio semanal foi removido.");
     } catch (error) {
       notify("Erro ao excluir fixo", error instanceof Error ? error.message : "Nao foi possivel excluir o agendamento fixo.");
     }
@@ -284,7 +291,7 @@ export default function App() {
     try {
       const item = await createGalleryItemRequest(token, { title, image });
       setGallery((current) => [item, ...current]);
-      notify("Imagem adicionada", `${item.title} foi adicionada ao portfólio.`);
+      notify("Imagem adicionada", `${item.title} foi adicionada ao portfÃ³lio.`);
     } catch (error) {
       notify("Erro ao salvar", error instanceof Error ? error.message : "Nao foi possivel adicionar a imagem.");
     }
@@ -314,7 +321,7 @@ export default function App() {
     try {
       await deleteGalleryItemRequest(token, id);
       setGallery((current) => current.filter((item) => item.id !== id));
-      notify("Imagem removida", "A imagem foi removida do portfólio.");
+      notify("Imagem removida", "A imagem foi removida do portfÃ³lio.");
     } catch (error) {
       notify("Erro ao remover", error instanceof Error ? error.message : "Nao foi possivel remover a imagem.");
     }
@@ -330,7 +337,7 @@ export default function App() {
       const updated = await updateBusinessHourRequest(token, weekday, hours);
       setBusinessHours(updated);
     } catch (error) {
-      notify("Erro ao salvar horário", error instanceof Error ? error.message : "Nao foi possivel salvar o expediente.");
+      notify("Erro ao salvar horÃ¡rio", error instanceof Error ? error.message : "Nao foi possivel salvar o expediente.");
     }
   }
 
@@ -343,7 +350,7 @@ export default function App() {
     try {
       const updated = await createClosedDateRequest(token, date);
       setClosedDates(updated);
-      notify("Fechamento cadastrado", "A data não aparecerá para clientes.");
+      notify("Fechamento cadastrado", "A data nÃ£o aparecerÃ¡ para clientes.");
     } catch (error) {
       notify("Erro ao cadastrar fechamento", error instanceof Error ? error.message : "Nao foi possivel cadastrar o fechamento.");
     }
@@ -388,9 +395,9 @@ export default function App() {
     try {
       const service = await createServiceRequest(token, { name, price, duration, active: true });
       setServices((current) => [...current, service]);
-      notify("Serviço cadastrado", `${service.name} foi adicionado.`);
+      notify("ServiÃ§o cadastrado", `${service.name} foi adicionado.`);
     } catch (error) {
-      notify("Erro ao salvar", error instanceof Error ? error.message : "Nao foi possivel cadastrar o serviço.");
+      notify("Erro ao salvar", error instanceof Error ? error.message : "Nao foi possivel cadastrar o serviÃ§o.");
     }
   }
 
@@ -403,9 +410,9 @@ export default function App() {
     try {
       const service = await updateServiceRequest(token, id, payload);
       setServices((current) => current.map((item) => item.id === id ? service : item));
-      notify("Serviço atualizado", `${service.name} foi salvo.`);
+      notify("ServiÃ§o atualizado", `${service.name} foi salvo.`);
     } catch (error) {
-      notify("Erro ao salvar", error instanceof Error ? error.message : "Nao foi possivel editar o serviço.");
+      notify("Erro ao salvar", error instanceof Error ? error.message : "Nao foi possivel editar o serviÃ§o.");
     }
   }
 
@@ -418,9 +425,9 @@ export default function App() {
     try {
       await deleteServiceRequest(token, id);
       setServices((current) => current.filter((service) => service.id !== id));
-      notify("Serviço excluído", "O serviço foi removido.");
+      notify("ServiÃ§o excluÃ­do", "O serviÃ§o foi removido.");
     } catch (error) {
-      notify("Erro ao excluir", error instanceof Error ? error.message : "Nao foi possivel excluir o serviço.");
+      notify("Erro ao excluir", error instanceof Error ? error.message : "Nao foi possivel excluir o serviÃ§o.");
     }
   }
 
@@ -463,7 +470,7 @@ export default function App() {
     try {
       await deleteProductRequest(token, id);
       setProducts((current) => current.filter((product) => product.id !== id));
-      notify("Produto excluído", "O produto foi removido da loja.");
+      notify("Produto excluÃ­do", "O produto foi removido da loja.");
     } catch (error) {
       notify("Erro ao excluir", error instanceof Error ? error.message : "Nao foi possivel excluir o produto.");
     }
@@ -472,12 +479,52 @@ export default function App() {
   function requireAuthToken() {
     if (!authToken) {
       notify("Sessão expirada", "Entre novamente para salvar no servidor.");
+      void signOut(false);
       return null;
     }
     return authToken;
   }
 
+  async function restoreStoredSession() {
+    try {
+      const token = await getStoredAuthToken();
+      if (!token) {
+        return;
+      }
+
+      const response = await apiRequest<AuthResponse>("/auth/me", { token });
+      await applyAuthResponse(response, { persistToken: false });
+    } catch {
+      await clearStoredAuthToken();
+      resetAuthState();
+    } finally {
+      setAuthInitializing(false);
+    }
+  }
+
+  async function signOut(showMessage = false) {
+    await clearStoredAuthToken();
+    resetAuthState();
+    if (showMessage) {
+      notify("Sessão encerrada", "Você saiu da sua conta.");
+    }
+  }
+
+  function resetAuthState() {
+    setAuthToken(null);
+    setAuthClientId(null);
+    setLogged(false);
+    setRole("client");
+    setClientTab("home");
+    setAdminTab("dashboard");
+  }
+
   async function submitLogin() {
+    if (authSubmitting) {
+      return;
+    }
+
+    setAuthSubmitting(true);
     try {
       if (!email.trim() || !password) {
         notify("Dados obrigatorios", "Informe e-mail e senha.");
@@ -510,10 +557,16 @@ export default function App() {
       await applyAuthResponse(response);
     } catch (error) {
       notify("Acesso negado", error instanceof Error ? error.message : "Nao foi possivel acessar sua conta.");
+    } finally {
+      setAuthSubmitting(false);
     }
   }
 
-  async function applyAuthResponse(response: AuthResponse) {
+  async function applyAuthResponse(response: AuthResponse, options: { persistToken?: boolean } = {}) {
+    if (options.persistToken !== false) {
+      await storeAuthToken(response.token);
+    }
+
     setAuthToken(response.token);
     setAuthClientId(response.user.client?.id ?? null);
     setRole(response.user.role === "ADMIN" ? "admin" : "client");
@@ -569,7 +622,12 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe}>
         <StatusBar style="light" />
-        {!logged ? (
+        {authInitializing ? (
+          <View style={styles.loadingScreen}>
+            <ActivityIndicator color="#e9bd63" size="large" />
+            <Text style={styles.loadingText}>Conectando à barbearia...</Text>
+          </View>
+        ) : !logged ? (
           <AuthScreen
             mode={authMode}
             name={name}
@@ -583,6 +641,7 @@ export default function App() {
             onEmailChange={setEmail}
             onPasswordChange={setPassword}
             onPasswordConfirmationChange={setPasswordConfirmation}
+            submitting={authSubmitting}
             onSubmit={submitLogin}
           />
         ) : (
@@ -610,10 +669,7 @@ export default function App() {
                 onBookSlot={bookSlot}
                 onCancelAppointment={cancelAppointment}
                 onRescheduleAppointment={rescheduleAppointment}
-                onLogout={() => {
-                  setAuthToken(null);
-                  setLogged(false);
-                }}
+                onLogout={() => void signOut(true)}
                 onAdmin={() => undefined}
               />
             ) : (
@@ -653,10 +709,7 @@ export default function App() {
                 onSaveBusinessHour={saveBusinessHour}
                 onAddClosedDate={addClosedDate}
                 onRemoveClosedDate={removeClosedDate}
-                onLogout={() => {
-                  setAuthToken(null);
-                  setLogged(false);
-                }}
+                onLogout={() => void signOut(true)}
               />
             )}
           </View>
@@ -671,3 +724,6 @@ function notify(title: string, message: string) {
     Alert.alert(title, message);
   }
 }
+
+
+

@@ -1,5 +1,5 @@
-import React from "react";
-import { Image, ImageBackground, Text, TextInput, TouchableOpacity, View } from "react-native";
+﻿import React from "react";
+import { ActivityIndicator, Image, ImageBackground, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Segmented } from "../components/common";
 import { palette, styles } from "../theme";
 
@@ -14,6 +14,7 @@ export function AuthScreen({
   email,
   password,
   passwordConfirmation,
+  submitting,
   onModeChange,
   onNameChange,
   onPhoneChange,
@@ -28,6 +29,7 @@ export function AuthScreen({
   email: string;
   password: string;
   passwordConfirmation: string;
+  submitting?: boolean;
   onModeChange: (mode: AuthMode) => void;
   onNameChange: (name: string) => void;
   onPhoneChange: (phone: string) => void;
@@ -94,11 +96,14 @@ export function AuthScreen({
             </View>
           ) : null}
 
-          <TouchableOpacity style={[styles.primaryButton, styles.authSubmitButton]} onPress={onSubmit}>
-            <Text style={styles.primaryButtonText}>{isRegister ? "Criar conta" : "Entrar"}</Text>
+          <TouchableOpacity style={[styles.primaryButton, styles.authSubmitButton, submitting && styles.primaryButtonDisabled]} onPress={submitting ? undefined : onSubmit}>
+            {submitting ? <ActivityIndicator color="#100d0a" /> : <Text style={styles.primaryButtonText}>{isRegister ? "Criar conta" : "Entrar"}</Text>}
           </TouchableOpacity>
         </View>
       </View>
     </ImageBackground>
   );
 }
+
+
+

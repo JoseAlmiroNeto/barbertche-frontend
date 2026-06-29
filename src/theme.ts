@@ -1,4 +1,4 @@
-import { StyleSheet } from "react-native";
+﻿import { StyleSheet } from "react-native";
 
 export const palette = {
   ink: "#100d0a",
@@ -22,6 +22,18 @@ export const styles = StyleSheet.create({
   appShell: {
     flex: 1,
     backgroundColor: palette.ink
+  },
+  loadingScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    backgroundColor: palette.ink
+  },
+  loadingText: {
+    color: palette.cream,
+    fontSize: 15,
+    fontWeight: "700"
   },
   appIcon: {
     minWidth: 22,
@@ -1135,3 +1147,4 @@ export const styles = StyleSheet.create({
     marginTop: 6
   }
 });
+
