@@ -39,13 +39,21 @@ import {
   updateRecurringBooking as updateRecurringBookingRequest,
   updateService as updateServiceRequest,
 } from "./src/services/adminApi";
-import { apiRequest, type AuthResponse } from "./src/services/api";
+import {
+  apiRequest,
+  type AuthResponse,
+  type AuthUser,
+} from "./src/services/api";
 import {
   clearStoredAuthToken,
   getStoredAuthToken,
   storeAuthToken,
 } from "./src/services/authStorage";
-import { loadAppData, type AppData } from "./src/services/appData";
+import {
+  loadAppData,
+  loadClientAppData,
+  type AppData,
+} from "./src/services/appData";
 import { styles } from "./src/theme";
 import type {
   AdminTab,
@@ -94,11 +102,15 @@ export default function App() {
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [authClientId, setAuthClientId] = useState<string | null>(null);
+  const [clientAvailableSlots, setClientAvailableSlots] = useState<string[]>(
+    [],
+  );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const isSaving = Boolean(pendingAction);
-  const currentClient =
-    clients.find((client) => client.id === authClientId) ?? clients[0];
+  const authenticatedClient = authClientId
+    ? (clients.find((client) => client.id === authClientId) ?? null)
+    : null;
   const selectedService = serviceById(services, selectedServiceId);
   const dateOptions = useMemo(
     () => Array.from({ length: 10 }, (_, index) => isoForOffset(index)),
@@ -109,12 +121,51 @@ export default function App() {
     void restoreStoredSession();
   }, []);
 
+  useEffect(() => {
+    if (!logged || role !== "client" || !authToken || !selectedService.id) {
+      setClientAvailableSlots([]);
+      return;
+    }
+
+    let active = true;
+    setClientAvailableSlots([]);
+    void apiRequest<string[]>(
+      `/appointments/availability?date=${selectedDate}&serviceId=${selectedService.id}`,
+      { token: authToken },
+    )
+      .then((slots) => {
+        if (active) {
+          setClientAvailableSlots(slots);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setClientAvailableSlots([]);
+          notify(
+            "Disponibilidade indisponivel",
+            error instanceof Error
+              ? error.message
+              : "Nao foi possivel carregar os horarios livres.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authToken, logged, role, selectedDate, selectedService.id]);
+
   const bookingsForSelectedDate = readBookingsForDate(selectedDate);
-  const availableSlots = readAvailableSlots(selectedDate, selectedService);
-  const clientAppointments = currentClient
+  const availableSlots =
+    role === "client"
+      ? clientAvailableSlots
+      : readAvailableSlots(selectedDate, selectedService);
+  const clientAppointments = authenticatedClient
     ? dateOptions
         .flatMap((date) => readBookingsForDate(date))
-        .filter((appointment) => appointment.clientId === currentClient.id)
+        .filter(
+          (appointment) => appointment.clientId === authenticatedClient.id,
+        )
         .sort((a, b) =>
           `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`),
         )
@@ -177,7 +228,7 @@ export default function App() {
     }
 
     const service = serviceById(services, serviceId);
-    const client = currentClient;
+    const client = authenticatedClient;
     if (!manualClient && !client) {
       notify("Cliente não encontrado", "Entre novamente para agendar.");
       return false;
@@ -785,6 +836,7 @@ export default function App() {
   function resetAuthState() {
     setAuthToken(null);
     setAuthClientId(null);
+    setClientAvailableSlots([]);
     setLogged(false);
     setRole("client");
     setClientTab("home");
@@ -835,6 +887,8 @@ export default function App() {
       });
       await applyAuthResponse(response);
     } catch (error) {
+      await clearStoredAuthToken();
+      resetAuthState();
       notify(
         "Acesso negado",
         error instanceof Error
@@ -850,13 +904,19 @@ export default function App() {
     response: AuthResponse,
     options: { persistToken?: boolean } = {},
   ) {
+    const nextRole = response.user.role === "ADMIN" ? "admin" : "client";
+
+    if (nextRole === "client" && !response.user.client) {
+      throw new Error("Seu usuario ainda nao esta vinculado a um cliente.");
+    }
+
     if (options.persistToken !== false) {
       await storeAuthToken(response.token);
     }
 
     setAuthToken(response.token);
     setAuthClientId(response.user.client?.id ?? null);
-    setRole(response.user.role === "ADMIN" ? "admin" : "client");
+    setRole(nextRole);
 
     if (response.user.client) {
       setClients((current) => {
@@ -881,23 +941,33 @@ export default function App() {
       setPhone(response.user.phone ?? "");
     }
 
-    await loadInitialData(response.token);
+    await loadInitialData(response.token, nextRole, response.user);
     setPassword("");
     setPasswordConfirmation("");
     setLogged(true);
   }
 
-  async function loadInitialData(token: string) {
+  async function loadInitialData(
+    token: string,
+    nextRole = role,
+    user?: AuthUser,
+  ) {
     try {
-      const data = await loadAppData(token);
+      const data =
+        nextRole === "client" && user
+          ? await loadClientAppData(token, user)
+          : await loadAppData(token);
       applyAppData(data);
     } catch (error) {
       notify(
-        "Dados locais",
+        nextRole === "client" ? "Sessao invalida" : "Dados locais",
         error instanceof Error
           ? error.message
           : "Nao foi possivel carregar os dados do servidor.",
       );
+      if (nextRole === "client") {
+        throw error;
+      }
     }
   }
 
@@ -948,33 +1018,42 @@ export default function App() {
           <View style={styles.appShell}>
             <Header role={role} />
             {role === "client" ? (
-              <ClientApp
-                tab={clientTab}
-                currentClient={currentClient}
-                services={services}
-                products={products}
-                gallery={gallery}
-                dateOptions={dateOptions}
-                selectedDate={selectedDate}
-                selectedService={selectedService}
-                selectedServiceId={selectedServiceId}
-                availableSlots={availableSlots}
-                occupiedSlots={bookingsForSelectedDate.map(
-                  (booking) => booking.start,
-                )}
-                clientAppointments={clientAppointments}
-                businessHours={businessHours}
-                closedDates={closedDates}
-                onTabChange={setClientTab}
-                onDateChange={setSelectedDate}
-                onServiceChange={setSelectedServiceId}
-                onBookSlot={bookSlot}
-                onCancelAppointment={cancelAppointment}
-                onRescheduleAppointment={rescheduleAppointment}
-                savingAppointment={isSaving}
-                onLogout={() => void signOut(true)}
-                onAdmin={() => undefined}
-              />
+              authenticatedClient ? (
+                <ClientApp
+                  tab={clientTab}
+                  currentClient={authenticatedClient}
+                  services={services}
+                  products={products}
+                  gallery={gallery}
+                  dateOptions={dateOptions}
+                  selectedDate={selectedDate}
+                  selectedService={selectedService}
+                  selectedServiceId={selectedServiceId}
+                  availableSlots={availableSlots}
+                  occupiedSlots={bookingsForSelectedDate.map(
+                    (booking) => booking.start,
+                  )}
+                  clientAppointments={clientAppointments}
+                  businessHours={businessHours}
+                  closedDates={closedDates}
+                  onTabChange={setClientTab}
+                  onDateChange={setSelectedDate}
+                  onServiceChange={setSelectedServiceId}
+                  onBookSlot={bookSlot}
+                  onCancelAppointment={cancelAppointment}
+                  onRescheduleAppointment={rescheduleAppointment}
+                  savingAppointment={isSaving}
+                  onLogout={() => void signOut(true)}
+                  onAdmin={() => undefined}
+                />
+              ) : (
+                <View style={styles.loadingScreen}>
+                  <ActivityIndicator color="#e9bd63" size="large" />
+                  <Text style={styles.loadingText}>
+                    Carregando seu perfil...
+                  </Text>
+                </View>
+              )
             ) : (
               <AdminApp
                 tab={adminTab}
