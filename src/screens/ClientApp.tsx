@@ -1,8 +1,40 @@
-import React, { useState } from "react";
-import { Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import type { Appointment, BusinessHours, Client, ClientTab, GalleryItem, Product, Service } from "../types";
-import { BottomTabs, Chip, ChipRow, DateStrip, EmptyState, HeroCard, SectionTitle, Segmented } from "../components/common";
-import { AppointmentCard, AvailabilitySummary, GalleryCarousel, GalleryGrid, ProductCarousel, ProductList, ProfilePanel } from "../components/domain";
+﻿import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import type {
+  Appointment,
+  BusinessHours,
+  Client,
+  ClientTab,
+  GalleryItem,
+  Product,
+  Service,
+} from "../types";
+import {
+  BottomTabs,
+  Chip,
+  ChipRow,
+  DateStrip,
+  EmptyState,
+  HeroCard,
+  SectionTitle,
+  Segmented,
+} from "../components/common";
+import {
+  AppointmentCard,
+  AvailabilitySummary,
+  GalleryCarousel,
+  GalleryGrid,
+  ProductCarousel,
+  ProductList,
+  ProfilePanel,
+} from "../components/domain";
 import { styles } from "../theme";
 import { dateLabel, weekdayOf } from "../utils/date";
 import { money } from "../utils/time";
@@ -16,9 +48,6 @@ export function ClientApp({
   products,
   gallery,
   dateOptions,
-  selectedDate,
-  selectedService,
-  selectedServiceId,
   availableSlots,
   occupiedSlots,
   clientAppointments,
@@ -30,8 +59,9 @@ export function ClientApp({
   onBookSlot,
   onCancelAppointment,
   onRescheduleAppointment,
+  savingAppointment,
   onLogout,
-  onAdmin
+  onAdmin,
 }: {
   tab: ClientTab;
   currentClient: Client;
@@ -50,13 +80,19 @@ export function ClientApp({
   onTabChange: (tab: ClientTab) => void;
   onDateChange: (date: string) => void;
   onServiceChange: (serviceId: string) => void;
-  onBookSlot: (start: string) => void | Promise<void>;
-  onCancelAppointment: (id: string) => void | Promise<void>;
-  onRescheduleAppointment: (id: string, date: string, start: string) => void | Promise<void>;
+  onBookSlot: (start: string) => boolean | void | Promise<boolean | void>;
+  onCancelAppointment: (id: string) => boolean | void | Promise<boolean | void>;
+  onRescheduleAppointment: (
+    id: string,
+    date: string,
+    start: string,
+  ) => boolean | void | Promise<boolean | void>;
+  savingAppointment?: boolean;
   onLogout: () => void;
   onAdmin: () => void;
 }) {
-  const [appointmentView, setAppointmentView] = useState<AppointmentView>("upcoming");
+  const [appointmentView, setAppointmentView] =
+    useState<AppointmentView>("upcoming");
   const [bookingServiceId, setBookingServiceId] = useState<string | null>(null);
   const [bookingDate, setBookingDate] = useState<string | null>(null);
   const [bookingSlot, setBookingSlot] = useState<string | null>(null);
@@ -64,20 +100,28 @@ export function ClientApp({
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
   const todayIso = new Date().toISOString().slice(0, 10);
-  const upcomingAppointments = clientAppointments.filter((appointment) => appointment.status === "confirmed" && appointment.date >= todayIso);
-  const historyAppointments = clientAppointments.filter((appointment) => appointment.status === "confirmed" && appointment.date < todayIso);
+  const upcomingAppointments = clientAppointments.filter(
+    (appointment) =>
+      appointment.status === "confirmed" && appointment.date >= todayIso,
+  );
+  const historyAppointments = clientAppointments.filter(
+    (appointment) =>
+      appointment.status === "confirmed" && appointment.date < todayIso,
+  );
   const selectedAppointments =
-    appointmentView === "upcoming"
-      ? upcomingAppointments
-      : historyAppointments;
-  const draftService = services.find((service) => service.id === bookingServiceId) ?? null;
+    appointmentView === "upcoming" ? upcomingAppointments : historyAppointments;
+  const draftService =
+    services.find((service) => service.id === bookingServiceId) ?? null;
   const canShowSlots = Boolean(draftService && bookingDate);
-  const visibleAvailableSlots = canShowSlots ? availableSlots.filter((slot) => !occupiedSlots.includes(slot)) : [];
+  const visibleAvailableSlots = canShowSlots
+    ? availableSlots.filter((slot) => !occupiedSlots.includes(slot))
+    : [];
   const openDateOptions = dateOptions.filter((date) => {
     const hours = businessHours[weekdayOf(date)];
     return Boolean(hours) && !closedDates.includes(date);
   });
-  const bottomActiveTab = tab === "book" ? "mine" : tab === "gallery" ? "home" : tab;
+  const bottomActiveTab =
+    tab === "book" ? "mine" : tab === "gallery" ? "home" : tab;
 
   function startNewBooking() {
     setReschedulingId(null);
@@ -110,15 +154,17 @@ export function ClientApp({
     onDateChange(date);
   }
 
-  function confirmBooking() {
-    if (!bookingSlot || !bookingDate) {
+  async function confirmBooking() {
+    if (!bookingSlot || !bookingDate || savingAppointment) {
       return;
     }
 
-    if (reschedulingId) {
-      onRescheduleAppointment(reschedulingId, bookingDate, bookingSlot);
-    } else {
-      onBookSlot(bookingSlot);
+    const success = reschedulingId
+      ? await onRescheduleAppointment(reschedulingId, bookingDate, bookingSlot)
+      : await onBookSlot(bookingSlot);
+
+    if (success === false) {
+      return;
     }
 
     setConfirmVisible(false);
@@ -128,98 +174,179 @@ export function ClientApp({
     onTabChange("mine");
   }
 
-  function confirmCancelAppointment() {
-    if (!cancelTarget) {
+  async function confirmCancelAppointment() {
+    if (!cancelTarget || savingAppointment) {
       return;
     }
 
-    onCancelAppointment(cancelTarget.id);
+    const success = await onCancelAppointment(cancelTarget.id);
+    if (success === false) {
+      return;
+    }
+
     setCancelTarget(null);
     setAppointmentView("upcoming");
   }
 
   return (
     <>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+      >
         {tab === "home" ? (
           <>
             <HeroCard
               title={`Bom dia, ${currentClient.name.split(" ")[0]}`}
-              text="Veja seu próximo horário, acompanhe inspirações e agende quando precisar."
-              action="Agendar Horário"
+              text="Veja seu prÃ³ximo horÃ¡rio, acompanhe inspiraÃ§Ãµes e agende quando precisar."
+              action="Agendar HorÃ¡rio"
               onPress={startNewBooking}
             />
-            <SectionTitle title="Próximo horário" action="Ver horários" onPress={() => onTabChange("mine")} />
+            <SectionTitle
+              title="PrÃ³ximo horÃ¡rio"
+              action="Ver horÃ¡rios"
+              onPress={() => onTabChange("mine")}
+            />
             {upcomingAppointments[0] ? (
-              <AppointmentCard appointment={upcomingAppointments[0]} services={services} />
+              <AppointmentCard
+                appointment={upcomingAppointments[0]}
+                services={services}
+              />
             ) : (
-              <EmptyState text="Você ainda não tem horário marcado." />
+              <EmptyState text="VocÃª ainda nÃ£o tem horÃ¡rio marcado." />
             )}
-            <SectionTitle title="Cortes em destaque" action="Ver inspirações" onPress={() => onTabChange("gallery")} />
-            <GalleryCarousel items={gallery} onViewMore={() => onTabChange("gallery")} />
-            <SectionTitle title="Promoções" />
+            <SectionTitle
+              title="Cortes em destaque"
+              action="Ver inspiraÃ§Ãµes"
+              onPress={() => onTabChange("gallery")}
+            />
+            <GalleryCarousel
+              items={gallery}
+              onViewMore={() => onTabChange("gallery")}
+            />
+            <SectionTitle title="PromoÃ§Ãµes" />
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Combo cabelo + barba</Text>
-              <Text style={styles.cardText}>Atendimento completo com acabamento premium e preço especial nesta semana.</Text>
+              <Text style={styles.cardText}>
+                Atendimento completo com acabamento premium e preÃ§o especial
+                nesta semana.
+              </Text>
             </View>
-            <SectionTitle title="Produtos" action="Abrir loja" onPress={() => onTabChange("products")} />
-            <ProductCarousel products={products.filter((product) => product.available)} onViewMore={() => onTabChange("products")} />
+            <SectionTitle
+              title="Produtos"
+              action="Abrir loja"
+              onPress={() => onTabChange("products")}
+            />
+            <ProductCarousel
+              products={products.filter((product) => product.available)}
+              onViewMore={() => onTabChange("products")}
+            />
           </>
         ) : null}
 
         {tab === "book" ? (
           <>
-            <SectionTitle title={reschedulingId ? "Remarcar agendamento" : "Novo agendamento"} action="Voltar" onPress={() => onTabChange("mine")} />
-            <SectionTitle title="Escolha o serviço" />
+            <SectionTitle
+              title={
+                reschedulingId ? "Remarcar agendamento" : "Novo agendamento"
+              }
+              action="Voltar"
+              onPress={() => onTabChange("mine")}
+            />
+            <SectionTitle title="Escolha o serviÃ§o" />
             <ChipRow>
-              {services.filter((service) => service.active).map((service) => (
-                <Chip key={service.id} active={service.id === bookingServiceId} onPress={() => handleServiceSelect(service.id)}>
-                  {service.name} - {service.duration}min
-                </Chip>
-              ))}
+              {services
+                .filter((service) => service.active)
+                .map((service) => (
+                  <Chip
+                    key={service.id}
+                    active={service.id === bookingServiceId}
+                    onPress={() => handleServiceSelect(service.id)}
+                  >
+                    {service.name} - {service.duration}min
+                  </Chip>
+                ))}
             </ChipRow>
-            
+
             <SectionTitle title="Dia" />
-            <DateStrip dates={openDateOptions} selectedDate={bookingDate ?? ""} closedDates={closedDates} onSelect={handleDateSelect} />
+            <DateStrip
+              dates={openDateOptions}
+              selectedDate={bookingDate ?? ""}
+              closedDates={closedDates}
+              onSelect={handleDateSelect}
+            />
             {draftService && bookingDate ? (
               <>
-                <AvailabilitySummary date={bookingDate} service={draftService} slots={visibleAvailableSlots} businessHours={businessHours} closedDates={closedDates} />
-                
-                <SectionTitle title="Selecione um horário disponível" />
+                <AvailabilitySummary
+                  date={bookingDate}
+                  service={draftService}
+                  slots={visibleAvailableSlots}
+                  businessHours={businessHours}
+                  closedDates={closedDates}
+                />
+
+                <SectionTitle title="Selecione um horÃ¡rio disponÃ­vel" />
                 <View style={styles.slotGrid}>
                   {visibleAvailableSlots.map((slot) => (
                     <TouchableOpacity
                       key={slot}
-                      style={[styles.slot, bookingSlot === slot && styles.slotSelected]}
+                      style={[
+                        styles.slot,
+                        bookingSlot === slot && styles.slotSelected,
+                      ]}
                       onPress={() => setBookingSlot(slot)}
                     >
-                      <Text style={[styles.slotText, bookingSlot === slot && styles.slotTextSelected]}>{slot}</Text>
+                      <Text
+                        style={[
+                          styles.slotText,
+                          bookingSlot === slot && styles.slotTextSelected,
+                        ]}
+                      >
+                        {slot}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-                {visibleAvailableSlots.length === 0 ? <EmptyState text="Não há horários livres para este serviço neste dia." /> : null}
+                {visibleAvailableSlots.length === 0 ? (
+                  <EmptyState text="NÃ£o hÃ¡ horÃ¡rios livres para este serviÃ§o neste dia." />
+                ) : null}
                 {bookingSlot ? (
-                  <TouchableOpacity style={styles.primaryButton} onPress={() => setConfirmVisible(true)}>
-                    <Text style={styles.primaryButtonText}>{reschedulingId ? "Remarcar" : "Agendar"}</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.primaryButton,
+                      savingAppointment && styles.primaryButtonDisabled,
+                    ]}
+                    onPress={
+                      savingAppointment
+                        ? undefined
+                        : () => setConfirmVisible(true)
+                    }
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      {reschedulingId ? "Remarcar" : "Agendar"}
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
               </>
             ) : (
-              <EmptyState text="Selecione um serviço e um dia para ver os horários disponíveis." />
+              <EmptyState text="Selecione um serviÃ§o e um dia para ver os horÃ¡rios disponÃ­veis." />
             )}
           </>
         ) : null}
 
         {tab === "mine" ? (
           <>
-            <SectionTitle title="Meus Horários" />
-            <TouchableOpacity style={styles.primaryButton} onPress={startNewBooking}>
+            <SectionTitle title="Meus HorÃ¡rios" />
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={startNewBooking}
+            >
               <Text style={styles.primaryButtonText}>+ Novo Agendamento</Text>
             </TouchableOpacity>
             <Segmented
               options={[
-                { label: "Próximos", value: "upcoming" },
-                { label: "Histórico", value: "history" }
+                { label: "PrÃ³ximos", value: "upcoming" },
+                { label: "HistÃ³rico", value: "history" },
               ]}
               value={appointmentView}
               onChange={setAppointmentView}
@@ -229,73 +356,150 @@ export function ClientApp({
                 key={appointment.id}
                 appointment={appointment}
                 services={services}
-                actions={appointment.status === "confirmed" && appointment.date >= todayIso && appointment.source !== "recurring" ? [
-                  { label: "Remarcar", onPress: () => startReschedule(appointment) },
-                  { label: "Cancelar agendamento", danger: true, onPress: () => setCancelTarget(appointment) }
-                ] : undefined}
+                actions={
+                  appointment.status === "confirmed" &&
+                  appointment.date >= todayIso &&
+                  appointment.source !== "recurring"
+                    ? [
+                        {
+                          label: "Remarcar",
+                          onPress: () => startReschedule(appointment),
+                        },
+                        {
+                          label: "Cancelar agendamento",
+                          danger: true,
+                          onPress: () => setCancelTarget(appointment),
+                        },
+                      ]
+                    : undefined
+                }
               />
             ))}
-            {selectedAppointments.length === 0 ? <EmptyState text="Nenhum horário encontrado nesta categoria." /> : null}
+            {selectedAppointments.length === 0 ? (
+              <EmptyState text="Nenhum horÃ¡rio encontrado nesta categoria." />
+            ) : null}
           </>
         ) : null}
 
         {tab === "gallery" ? (
           <>
-            <SectionTitle title="Inspirações" action="Voltar" onPress={() => onTabChange("home")} />
+            <SectionTitle
+              title="InspiraÃ§Ãµes"
+              action="Voltar"
+              onPress={() => onTabChange("home")}
+            />
             <GalleryGrid items={gallery} />
           </>
         ) : null}
         {tab === "products" ? <ProductList products={products} /> : null}
         {tab === "profile" ? (
           <>
-            <ProfilePanel name={currentClient.name} phone={currentClient.phone} onLogout={onLogout} />
-            <SectionTitle title="Histórico de cortes" />
-            <EmptyState text="Seus cortes finalizados aparecerão aqui." />
+            <ProfilePanel
+              name={currentClient.name}
+              phone={currentClient.phone}
+              onLogout={onLogout}
+            />
+            <SectionTitle title="HistÃ³rico de cortes" />
+            <EmptyState text="Seus cortes finalizados aparecerÃ£o aqui." />
           </>
         ) : null}
       </ScrollView>
       <BottomTabs
         tabs={[
-          ["home", "Início", "home"],
-          ["mine", "Horários", "calendar"],
+          ["home", "InÃ­cio", "home"],
+          ["mine", "HorÃ¡rios", "calendar"],
           ["products", "Loja", "bag"],
-          ["profile", "Perfil", "person"]
+          ["profile", "Perfil", "person"],
         ]}
         active={bottomActiveTab}
         onChange={(value) => onTabChange(value as ClientTab)}
       />
-      <Modal transparent visible={confirmVisible} animationType="fade" onRequestClose={() => setConfirmVisible(false)}>
+      <Modal
+        transparent
+        visible={confirmVisible}
+        animationType="fade"
+        onRequestClose={() => setConfirmVisible(false)}
+      >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{reschedulingId ? "Confirmar remarcação" : "Confirmar agendamento"}</Text>
-            <Text style={styles.cardText}>Serviço: {draftService?.name}</Text>
-            <Text style={styles.cardText}>Dia: {bookingDate ? dateLabel(bookingDate) : "-"}</Text>
-            <Text style={styles.cardText}>Horário: {bookingSlot ?? "-"}</Text>
-            {draftService ? <Text style={styles.price}>{money(draftService.price)}</Text> : null}
+            <Text style={styles.modalTitle}>
+              {reschedulingId
+                ? "Confirmar remarcaÃ§Ã£o"
+                : "Confirmar agendamento"}
+            </Text>
+            <Text style={styles.cardText}>ServiÃ§o: {draftService?.name}</Text>
+            <Text style={styles.cardText}>
+              Dia: {bookingDate ? dateLabel(bookingDate) : "-"}
+            </Text>
+            <Text style={styles.cardText}>HorÃ¡rio: {bookingSlot ?? "-"}</Text>
+            {draftService ? (
+              <Text style={styles.price}>{money(draftService.price)}</Text>
+            ) : null}
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setConfirmVisible(false)}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setConfirmVisible(false)}
+              >
                 <Text style={styles.secondaryButtonText}>Voltar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryButton} onPress={confirmBooking}>
-                <Text style={styles.primaryButtonText}>Confirmar</Text>
+              <TouchableOpacity
+                style={[
+                  styles.primaryButton,
+                  savingAppointment && styles.primaryButtonDisabled,
+                ]}
+                onPress={savingAppointment ? undefined : confirmBooking}
+              >
+                {savingAppointment ? (
+                  <ActivityIndicator color="#100d0a" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Confirmar</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-      <Modal transparent visible={Boolean(cancelTarget)} animationType="fade" onRequestClose={() => setCancelTarget(null)}>
+      <Modal
+        transparent
+        visible={Boolean(cancelTarget)}
+        animationType="fade"
+        onRequestClose={() => setCancelTarget(null)}
+      >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Cancelar agendamento?</Text>
-            <Text style={styles.cardText}>Tem certeza que deseja cancelar este horário?</Text>
-            <Text style={styles.cardText}>Dia: {cancelTarget ? dateLabel(cancelTarget.date) : "-"}</Text>
-            <Text style={styles.cardText}>Horário: {cancelTarget?.start ?? "-"} - {cancelTarget?.end ?? "-"}</Text>
+            <Text style={styles.cardText}>
+              Tem certeza que deseja cancelar este horÃ¡rio?
+            </Text>
+            <Text style={styles.cardText}>
+              Dia: {cancelTarget ? dateLabel(cancelTarget.date) : "-"}
+            </Text>
+            <Text style={styles.cardText}>
+              HorÃ¡rio: {cancelTarget?.start ?? "-"} -{" "}
+              {cancelTarget?.end ?? "-"}
+            </Text>
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setCancelTarget(null)}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setCancelTarget(null)}
+              >
                 <Text style={styles.secondaryButtonText}>Voltar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.primaryButton, styles.dangerButton]} onPress={confirmCancelAppointment}>
-                <Text style={styles.primaryButtonText}>Cancelar</Text>
+              <TouchableOpacity
+                style={[
+                  styles.primaryButton,
+                  styles.dangerButton,
+                  savingAppointment && styles.primaryButtonDisabled,
+                ]}
+                onPress={
+                  savingAppointment ? undefined : confirmCancelAppointment
+                }
+              >
+                {savingAppointment ? (
+                  <ActivityIndicator color="#100d0a" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Cancelar</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
