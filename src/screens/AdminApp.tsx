@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import {
   Alert,
   Platform,
@@ -369,8 +369,29 @@ export function AdminApp({
     setGalleryModalVisible(true);
   }
 
-  async function pickImage(onPick: (uri: string) => void) {
+  useEffect(() => {
+    console.log("[GalleryImageState] changed", {
+      hasImage: Boolean(newGalleryImage),
+      image: newGalleryImage,
+      editingGalleryId,
+      galleryModalVisible,
+    });
+  }, [editingGalleryId, galleryModalVisible, newGalleryImage]);
+
+  useEffect(() => {
+    console.log("[ProductImageState] changed", {
+      hasImage: Boolean(newProductImage),
+      image: newProductImage,
+      editingProductId,
+      productModalVisible,
+    });
+  }, [editingProductId, newProductImage, productModalVisible]);
+
+  async function pickImage(source: "gallery" | "product", onPick: (uri: string) => void) {
+    console.log("[ImagePicker] requesting permission", { source });
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    console.log("[ImagePicker] permission result", { source, permission });
 
     if (!permission.granted) {
       Alert.alert(
@@ -380,37 +401,72 @@ export function AdminApp({
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: false,
-      quality: 0.85,
-      legacy: true,
-    });
+    try {
+      console.log("[ImagePicker] opening library", { source });
 
-    if (result.canceled) {
-      return;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: false,
+        quality: 0.85,
+        legacy: true,
+      });
+
+      console.log("[ImagePicker] raw result", {
+        source,
+        canceled: result.canceled,
+        assetsCount: result.assets?.length ?? 0,
+        firstAsset: result.assets?.[0],
+        result,
+      });
+
+      if (result.canceled) {
+        Alert.alert("Selecao cancelada", "O seletor retornou canceled=true.");
+        return;
+      }
+
+      const asset = result.assets?.[0];
+      const uri = asset?.uri;
+
+      console.log("[ImagePicker] selected asset", {
+        source,
+        uri,
+        width: asset?.width,
+        height: asset?.height,
+        fileName: asset?.fileName,
+        mimeType: asset?.mimeType,
+        assetId: asset?.assetId,
+      });
+
+      Alert.alert(
+        "Imagem selecionada",
+        uri ? `URI recebida:\n${uri}` : "Sem URI no primeiro asset.",
+      );
+
+      if (!uri) {
+        return;
+      }
+
+      console.log("[ImagePicker] calling onPick", { source, uri });
+      onPick(uri);
+    } catch (error) {
+      console.log("[ImagePicker] error", { source, error });
+      Alert.alert("Erro ao selecionar imagem", String(error));
     }
-
-    console.log("PICKER RESULT:", result);
-
-    const uri = result.assets?.[0]?.uri;
-    Alert.alert("Imagem selecionada", uri ?? "Sem URI");
-
-    if (!uri) {
-      return;
-    }
-
-    onPick(uri);
   }
 
   function pickProductImage() {
-    void pickImage(setNewProductImage);
+    void pickImage("product", (uri) => {
+      console.log("[ProductImageState] setNewProductImage", { uri });
+      setNewProductImage(uri);
+    });
   }
 
   function pickGalleryImage() {
-    void pickImage(setNewGalleryImage);
+    void pickImage("gallery", (uri) => {
+      console.log("[GalleryImageState] setNewGalleryImage", { uri });
+      setNewGalleryImage(uri);
+    });
   }
-
   async function confirmManualBooking() {
     if (saving) {
       return;
@@ -1364,3 +1420,4 @@ function buildAdminTimeline(
 
   return rows;
 }
+
