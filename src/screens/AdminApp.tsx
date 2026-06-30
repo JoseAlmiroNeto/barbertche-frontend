@@ -381,15 +381,25 @@ export function AdminApp({
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
+      mediaTypes: ["images"],
+      allowsMultipleSelection: false,
       quality: 0.85,
     });
 
-    if (!result.canceled) {
-      onPick(result.assets[0]?.uri ?? "");
+    if (result.canceled) {
+      return;
     }
+
+    const uri = result.assets[0]?.uri;
+    if (!uri) {
+      Alert.alert(
+        "Imagem nao selecionada",
+        "Nao foi possivel ler a imagem escolhida. Tente selecionar outra foto da galeria.",
+      );
+      return;
+    }
+
+    onPick(uri);
   }
 
   function pickProductImage() {
