@@ -49,7 +49,6 @@ export function ClientApp({
   gallery,
   dateOptions,
   availableSlots,
-  occupiedSlots,
   clientAppointments,
   businessHours,
   closedDates,
@@ -73,7 +72,6 @@ export function ClientApp({
   selectedService: Service;
   selectedServiceId: string;
   availableSlots: string[];
-  occupiedSlots: string[];
   clientAppointments: Appointment[];
   businessHours: BusinessHours;
   closedDates: string[];
@@ -113,9 +111,7 @@ export function ClientApp({
   const draftService =
     services.find((service) => service.id === bookingServiceId) ?? null;
   const canShowSlots = Boolean(draftService && bookingDate);
-  const visibleAvailableSlots = canShowSlots
-    ? availableSlots.filter((slot) => !occupiedSlots.includes(slot))
-    : [];
+  const visibleAvailableSlots = canShowSlots ? availableSlots : [];
   const openDateOptions = dateOptions.filter((date) => {
     const hours = businessHours[weekdayOf(date)];
     return Boolean(hours) && !closedDates.includes(date);
@@ -198,13 +194,13 @@ export function ClientApp({
           <>
             <HeroCard
               title={`Bom dia, ${currentClient.name.split(" ")[0]}`}
-              text="Veja seu prÃ³ximo horÃ¡rio, acompanhe inspiraÃ§Ãµes e agende quando precisar."
-              action="Agendar HorÃ¡rio"
+              text="Veja seu proximo horário, acompanhe inspirações e agende quando precisar."
+              action="Agendar Horário"
               onPress={startNewBooking}
             />
             <SectionTitle
-              title="PrÃ³ximo horÃ¡rio"
-              action="Ver horÃ¡rios"
+              title="Próximo horário"
+              action="Ver horários"
               onPress={() => onTabChange("mine")}
             />
             {upcomingAppointments[0] ? (
@@ -213,22 +209,22 @@ export function ClientApp({
                 services={services}
               />
             ) : (
-              <EmptyState text="VocÃª ainda nÃ£o tem horÃ¡rio marcado." />
+              <EmptyState text="Você ainda não tem horário marcado." />
             )}
             <SectionTitle
               title="Cortes em destaque"
-              action="Ver inspiraÃ§Ãµes"
+              action="Ver inspirações"
               onPress={() => onTabChange("gallery")}
             />
             <GalleryCarousel
               items={gallery}
               onViewMore={() => onTabChange("gallery")}
             />
-            <SectionTitle title="PromoÃ§Ãµes" />
+            <SectionTitle title="Promoções" />
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Combo cabelo + barba</Text>
               <Text style={styles.cardText}>
-                Atendimento completo com acabamento premium e preÃ§o especial
+                Atendimento completo com acabamento premium e preço especial
                 nesta semana.
               </Text>
             </View>
@@ -253,7 +249,7 @@ export function ClientApp({
               action="Voltar"
               onPress={() => onTabChange("mine")}
             />
-            <SectionTitle title="Escolha o serviÃ§o" />
+            <SectionTitle title="Escolha o serviço" />
             <ChipRow>
               {services
                 .filter((service) => service.active)
@@ -285,7 +281,7 @@ export function ClientApp({
                   closedDates={closedDates}
                 />
 
-                <SectionTitle title="Selecione um horÃ¡rio disponÃ­vel" />
+                <SectionTitle title="Selecione um horário disponível" />
                 <View style={styles.slotGrid}>
                   {visibleAvailableSlots.map((slot) => (
                     <TouchableOpacity
@@ -308,7 +304,7 @@ export function ClientApp({
                   ))}
                 </View>
                 {visibleAvailableSlots.length === 0 ? (
-                  <EmptyState text="NÃ£o hÃ¡ horÃ¡rios livres para este serviÃ§o neste dia." />
+                  <EmptyState text="Não há horários livres para este serviÃ§o neste dia." />
                 ) : null}
                 {bookingSlot ? (
                   <TouchableOpacity
@@ -329,14 +325,14 @@ export function ClientApp({
                 ) : null}
               </>
             ) : (
-              <EmptyState text="Selecione um serviÃ§o e um dia para ver os horÃ¡rios disponÃ­veis." />
+              <EmptyState text="Selecione um serviÃ§o e um dia para ver os horários disponíveis." />
             )}
           </>
         ) : null}
 
         {tab === "mine" ? (
           <>
-            <SectionTitle title="Meus HorÃ¡rios" />
+            <SectionTitle title="Meus Horários" />
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={startNewBooking}
@@ -345,8 +341,8 @@ export function ClientApp({
             </TouchableOpacity>
             <Segmented
               options={[
-                { label: "PrÃ³ximos", value: "upcoming" },
-                { label: "HistÃ³rico", value: "history" },
+                { label: "Próximos", value: "upcoming" },
+                { label: "Histórico", value: "history" },
               ]}
               value={appointmentView}
               onChange={setAppointmentView}
@@ -376,7 +372,7 @@ export function ClientApp({
               />
             ))}
             {selectedAppointments.length === 0 ? (
-              <EmptyState text="Nenhum horÃ¡rio encontrado nesta categoria." />
+              <EmptyState text="Nenhum horário encontrado nesta categoria." />
             ) : null}
           </>
         ) : null}
@@ -399,15 +395,15 @@ export function ClientApp({
               phone={currentClient.phone}
               onLogout={onLogout}
             />
-            <SectionTitle title="HistÃ³rico de cortes" />
-            <EmptyState text="Seus cortes finalizados aparecerÃ£o aqui." />
+            <SectionTitle title="Histórico de cortes" />
+            <EmptyState text="Seus cortes finalizados aparecerão aqui." />
           </>
         ) : null}
       </ScrollView>
       <BottomTabs
         tabs={[
-          ["home", "InÃ­cio", "home"],
-          ["mine", "HorÃ¡rios", "calendar"],
+          ["home", "Início", "home"],
+          ["mine", "Horários", "calendar"],
           ["products", "Loja", "bag"],
           ["profile", "Perfil", "person"],
         ]}
@@ -424,14 +420,14 @@ export function ClientApp({
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {reschedulingId
-                ? "Confirmar remarcaÃ§Ã£o"
+                ? "Confirmar remarcaÃ§ão"
                 : "Confirmar agendamento"}
             </Text>
             <Text style={styles.cardText}>ServiÃ§o: {draftService?.name}</Text>
             <Text style={styles.cardText}>
               Dia: {bookingDate ? dateLabel(bookingDate) : "-"}
             </Text>
-            <Text style={styles.cardText}>HorÃ¡rio: {bookingSlot ?? "-"}</Text>
+            <Text style={styles.cardText}>Horário: {bookingSlot ?? "-"}</Text>
             {draftService ? (
               <Text style={styles.price}>{money(draftService.price)}</Text>
             ) : null}
@@ -469,14 +465,13 @@ export function ClientApp({
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Cancelar agendamento?</Text>
             <Text style={styles.cardText}>
-              Tem certeza que deseja cancelar este horÃ¡rio?
+              Tem certeza que deseja cancelar este horário?
             </Text>
             <Text style={styles.cardText}>
               Dia: {cancelTarget ? dateLabel(cancelTarget.date) : "-"}
             </Text>
             <Text style={styles.cardText}>
-              HorÃ¡rio: {cancelTarget?.start ?? "-"} -{" "}
-              {cancelTarget?.end ?? "-"}
+              Horário: {cancelTarget?.start ?? "-"} - {cancelTarget?.end ?? "-"}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity

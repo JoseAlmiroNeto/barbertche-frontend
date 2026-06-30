@@ -105,6 +105,7 @@ export default function App() {
   const [clientAvailableSlots, setClientAvailableSlots] = useState<string[]>(
     [],
   );
+  const [availabilityVersion, setAvailabilityVersion] = useState(0);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const isSaving = Boolean(pendingAction);
@@ -130,7 +131,7 @@ export default function App() {
     let active = true;
     setClientAvailableSlots([]);
     void apiRequest<string[]>(
-      `/appointments/availability?date=${selectedDate}&serviceId=${selectedService.id}`,
+      `/appointments/availability?date=${encodeURIComponent(selectedDate)}&serviceId=${encodeURIComponent(selectedService.id)}`,
       { token: authToken },
     )
       .then((slots) => {
@@ -153,7 +154,14 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [authToken, logged, role, selectedDate, selectedService.id]);
+  }, [
+    authToken,
+    availabilityVersion,
+    logged,
+    role,
+    selectedDate,
+    selectedService.id,
+  ]);
 
   const bookingsForSelectedDate = readBookingsForDate(selectedDate);
   const availableSlots =
@@ -217,6 +225,10 @@ export default function App() {
     setPendingAction(null);
   }
 
+  function refreshClientAvailability() {
+    setAvailabilityVersion((current) => current + 1);
+  }
+
   async function bookSlot(
     start: string,
     manualClient?: string,
@@ -234,11 +246,20 @@ export default function App() {
       return false;
     }
 
-    if (!slotIsAvailable(selectedDate, start, service)) {
+    if (manualClient && !slotIsAvailable(selectedDate, start, service)) {
       notify(
-        "Horário indisponível",
-        "Esse horário já foi ocupado ou bloqueado.",
+        "Horario indisponivel",
+        "Esse horario ja foi ocupado ou bloqueado.",
       );
+      return false;
+    }
+
+    if (!manualClient && !availableSlots.includes(start)) {
+      notify(
+        "Horario indisponivel",
+        "Esse horario ja foi ocupado ou bloqueado.",
+      );
+      refreshClientAvailability();
       return false;
     }
 
@@ -256,6 +277,9 @@ export default function App() {
         source: manualClient ? "manual" : "app",
       });
       setAppointments((current) => [...current, appointment]);
+      if (!manualClient) {
+        refreshClientAvailability();
+      }
       notify(
         "Agendamento confirmado",
         `${service.name} em ${selectedDate} às ${start}.`,
@@ -348,6 +372,7 @@ export default function App() {
       setAppointments((current) =>
         current.map((item) => (item.id === id ? updated : item)),
       );
+      refreshClientAvailability();
       notify(
         "Agendamento remarcado",
         `${service.name} em ${date} às ${start}.`,
@@ -438,7 +463,7 @@ export default function App() {
         active: true,
       });
       setRecurring((current) => [...current, created]);
-      notify("Agendamento fixo criado", "O horÃ¡rio semanal foi salvo.");
+      notify("Agendamento fixo criado", "O horário semanal foi salvo.");
     } catch (error) {
       notify(
         "Erro ao criar fixo",
@@ -463,7 +488,7 @@ export default function App() {
       setRecurring((current) =>
         current.map((item) => (item.id === id ? updated : item)),
       );
-      notify("Agendamento fixo atualizado", "O horÃ¡rio semanal foi salvo.");
+      notify("Agendamento fixo atualizado", "O horário semanal foi salvo.");
     } catch (error) {
       notify(
         "Erro ao editar fixo",
@@ -483,7 +508,7 @@ export default function App() {
     try {
       await deleteRecurringBookingRequest(token, id);
       setRecurring((current) => current.filter((item) => item.id !== id));
-      notify("Agendamento fixo excluÃ­do", "O horÃ¡rio semanal foi removido.");
+      notify("Agendamento fixo excluido", "O horário semanal foi removido.");
     } catch (error) {
       notify(
         "Erro ao excluir fixo",
@@ -555,7 +580,7 @@ export default function App() {
     try {
       await deleteGalleryItemRequest(token, id);
       setGallery((current) => current.filter((item) => item.id !== id));
-      notify("Imagem removida", "A imagem foi removida do portfÃ³lio.");
+      notify("Imagem removida", "A imagem foi removida do portfolio.");
     } catch (error) {
       notify(
         "Erro ao remover",
@@ -580,7 +605,7 @@ export default function App() {
       setBusinessHours(updated);
     } catch (error) {
       notify(
-        "Erro ao salvar horÃ¡rio",
+        "Erro ao salvar horário",
         error instanceof Error
           ? error.message
           : "Nao foi possivel salvar o expediente.",
@@ -597,7 +622,7 @@ export default function App() {
     try {
       const updated = await createClosedDateRequest(token, date);
       setClosedDates(updated);
-      notify("Fechamento cadastrado", "A data nÃ£o aparecerÃ¡ para clientes.");
+      notify("Fechamento cadastrado", "A data não aparecerá para clientes.");
     } catch (error) {
       notify(
         "Erro ao cadastrar fechamento",
@@ -842,6 +867,7 @@ export default function App() {
     setAuthToken(null);
     setAuthClientId(null);
     setClientAvailableSlots([]);
+    setAvailabilityVersion(0);
     setLogged(false);
     setRole("client");
     setClientTab("home");
@@ -1035,9 +1061,6 @@ export default function App() {
                   selectedService={selectedService}
                   selectedServiceId={selectedServiceId}
                   availableSlots={availableSlots}
-                  occupiedSlots={bookingsForSelectedDate.map(
-                    (booking) => booking.start,
-                  )}
                   clientAppointments={clientAppointments}
                   businessHours={businessHours}
                   closedDates={closedDates}

@@ -157,8 +157,7 @@ export function RecurringModal({
             contentContainerStyle={styles.modalScrollContent}
           >
             <Text style={styles.cardText}>
-              Selecione o cliente, serviÃ§o, dia da semana e horÃ¡rio
-              recorrente.
+              Selecione o cliente, serviço, dia da semana e horário recorrente.
             </Text>
             <SectionTitle title="Cliente" />
             <SelectField
@@ -206,7 +205,7 @@ export function RecurringModal({
                 );
               })}
             </ChipRow>
-            <SectionTitle title="HorÃ¡rio" />
+            <SectionTitle title="Horário" />
             {recurringStartOptions.length > 0 ? (
               <View style={styles.slotGrid}>
                 {recurringStartOptions.map((slot) => (
@@ -230,7 +229,7 @@ export function RecurringModal({
                 ))}
               </View>
             ) : (
-              <EmptyState text="Esse dia nÃ£o possui expediente configurado." />
+              <EmptyState text="Esse dia não possui expediente configurado." />
             )}
           </ScrollView>
           <View style={styles.modalActions}>
@@ -482,8 +481,8 @@ export function GalleryModal({
             contentContainerStyle={styles.modalScrollContent}
           >
             <Text style={styles.cardText}>
-              Cadastre um nome para o corte e selecione a foto que serÃ¡ exibida
-              no portfÃ³lio.
+              Cadastre um nome para o corte e selecione a foto que será exibida
+              no portfólio.
             </Text>
             <TextInput
               value={title}
@@ -573,7 +572,7 @@ export function ManualBookingModal({
     >
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Agendar balcÃ£o</Text>
+          <Text style={styles.modalTitle}>Agendar balcão</Text>
           <ScrollView
             showsVerticalScrollIndicator={false}
             style={styles.modalScroll}
@@ -616,7 +615,7 @@ export function ManualBookingModal({
                   );
                 })}
             </ChipRow>
-            <SectionTitle title="HorÃ¡rio" />
+            <SectionTitle title="Horário" />
             <View style={styles.slotGrid}>
               {bookingSlots.map((slot) => (
                 <TouchableOpacity
@@ -639,7 +638,7 @@ export function ManualBookingModal({
               ))}
             </View>
             {bookingSlots.length === 0 ? (
-              <EmptyState text="Sem horÃ¡rios livres para este serviÃ§o neste dia." />
+              <EmptyState text="Sem horários livres para este serviÃ§o neste dia." />
             ) : null}
           </ScrollView>
           <View style={styles.modalActions}>
@@ -702,7 +701,7 @@ export function ManualBlockModal({
     >
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Bloquear horÃ¡rio</Text>
+          <Text style={styles.modalTitle}>Bloquear horário</Text>
           <ScrollView
             showsVerticalScrollIndicator={false}
             style={styles.modalScroll}
@@ -716,7 +715,7 @@ export function ManualBlockModal({
               placeholderTextColor="#b59f82"
               style={styles.input}
             />
-            <SectionTitle title="InÃ­cio" />
+            <SectionTitle title="Início" />
             <View style={styles.slotGrid}>
               {startOptions.map((slot) => (
                 <TouchableOpacity
@@ -735,7 +734,7 @@ export function ManualBlockModal({
                 </TouchableOpacity>
               ))}
             </View>
-            <SectionTitle title="DuraÃ§Ã£o" />
+            <SectionTitle title="DuraÃ§ão" />
             <View style={styles.actionRow}>
               {[30, 60, 90, 120].map((option) => (
                 <TouchableOpacity
