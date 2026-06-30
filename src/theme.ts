@@ -676,7 +676,19 @@ export const styles = StyleSheet.create({
     width: "100%",
     height: 180,
     borderRadius: 8,
-    backgroundColor: palette.panelSoft
+    backgroundColor: palette.panelSoft,
+    marginBottom: 8
+  },
+  imageSelectedText: {
+    color: palette.success,
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 12
+  },
+  imageDebugText: {
+    color: palette.muted,
+    fontSize: 11,
+    marginBottom: 8
   },
   galleryTitle: {
     color: palette.cream,

@@ -384,18 +384,19 @@ export function AdminApp({
       mediaTypes: ["images"],
       allowsMultipleSelection: false,
       quality: 0.85,
+      legacy: true,
     });
 
     if (result.canceled) {
       return;
     }
 
-    const uri = result.assets[0]?.uri;
+    console.log("PICKER RESULT:", result);
+
+    const uri = result.assets?.[0]?.uri;
+    Alert.alert("Imagem selecionada", uri ?? "Sem URI");
+
     if (!uri) {
-      Alert.alert(
-        "Imagem nao selecionada",
-        "Nao foi possivel ler a imagem escolhida. Tente selecionar outra foto da galeria.",
-      );
       return;
     }
 

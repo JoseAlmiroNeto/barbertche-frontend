@@ -403,11 +403,17 @@ export function ProductModal({
               keyboardType="decimal-pad"
               style={styles.input}
             />
+            <Text style={styles.imageDebugText}>
+              {image || "Nenhuma imagem selecionada"}
+            </Text>
             {image ? (
-              <Image
-                source={{ uri: image }}
-                style={styles.galleryPickerPreview}
-              />
+              <>
+                <Image
+                  source={{ uri: image }}
+                  style={styles.galleryPickerPreview}
+                />
+                <Text style={styles.imageSelectedText}>Foto selecionada</Text>
+              </>
             ) : null}
             <TouchableOpacity
               style={styles.secondaryButtonFull}
@@ -491,11 +497,17 @@ export function GalleryModal({
               placeholderTextColor="#b59f82"
               style={styles.input}
             />
+            <Text style={styles.imageDebugText}>
+              {image || "Nenhuma imagem selecionada"}
+            </Text>
             {image ? (
-              <Image
-                source={{ uri: image }}
-                style={styles.galleryPickerPreview}
-              />
+              <>
+                <Image
+                  source={{ uri: image }}
+                  style={styles.galleryPickerPreview}
+                />
+                <Text style={styles.imageSelectedText}>Foto selecionada</Text>
+              </>
             ) : null}
             <TouchableOpacity
               style={styles.secondaryButtonFull}
