@@ -368,14 +368,6 @@ export function ProductModal({
   onPickImage: () => void;
   onConfirm: () => void;
 }) {
-  React.useEffect(() => {
-    console.log("[ProductModal] image prop changed", {
-      visible,
-      editingProductId,
-      hasImage: Boolean(image),
-      image,
-    });
-  }, [editingProductId, image, visible]);
 
   return (
     <Modal
@@ -412,9 +404,6 @@ export function ProductModal({
               keyboardType="decimal-pad"
               style={styles.input}
             />
-            <Text style={styles.imageDebugText}>
-              {image || "Nenhuma imagem selecionada"}
-            </Text>
             {image ? (
               <>
                 <Image
@@ -478,14 +467,6 @@ export function GalleryModal({
   onPickImage: () => void;
   onConfirm: () => void;
 }) {
-  React.useEffect(() => {
-    console.log("[GalleryModal] image prop changed", {
-      visible,
-      editingGalleryId,
-      hasImage: Boolean(image),
-      image,
-    });
-  }, [editingGalleryId, image, visible]);
 
   return (
     <Modal
@@ -515,9 +496,6 @@ export function GalleryModal({
               placeholderTextColor="#b59f82"
               style={styles.input}
             />
-            <Text style={styles.imageDebugText}>
-              {image || "Nenhuma imagem selecionada"}
-            </Text>
             {image ? (
               <>
                 <Image
@@ -810,4 +788,5 @@ export function ManualBlockModal({
     </Modal>
   );
 }
+
 
