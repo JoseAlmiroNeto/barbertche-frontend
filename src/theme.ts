@@ -264,7 +264,56 @@ export const styles = StyleSheet.create({
     color: palette.gold,
     fontWeight: "800"
   },
-  sectionTitle: {
+  legalAcceptRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 2
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    marginTop: 1
+  },
+  checkboxChecked: {
+    backgroundColor: palette.gold,
+    borderColor: palette.gold
+  },
+  checkboxMark: {
+    color: palette.ink,
+    fontWeight: "900",
+    fontSize: 14
+  },
+  legalAcceptText: {
+    flex: 1,
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 18
+  },
+  inlineLink: {
+    color: palette.gold,
+    fontWeight: "900"
+  },
+  legalVersion: {
+    color: palette.gold,
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: -6
+  },
+  legalSection: {
+    gap: 6
+  },
+  legalSectionTitle: {
+    color: palette.cream,
+    fontSize: 15,
+    fontWeight: "900"
+  },  sectionTitle: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -1159,4 +1208,5 @@ export const styles = StyleSheet.create({
     marginTop: 6
   }
 });
+
 

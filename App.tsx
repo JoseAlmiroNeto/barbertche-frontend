@@ -100,6 +100,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [authClientId, setAuthClientId] = useState<string | null>(null);
   const [clientAvailableSlots, setClientAvailableSlots] = useState<string[]>(
@@ -898,6 +899,11 @@ export default function App() {
           return;
         }
 
+        if (!termsAccepted) {
+          notify("Aceite necessario", "Aceite os Termos de Uso e a Politica de Privacidade para criar sua conta.");
+          return;
+        }
+
         const response = await apiRequest<AuthResponse>("/auth/register", {
           method: "POST",
           body: JSON.stringify({
@@ -975,6 +981,7 @@ export default function App() {
     await loadInitialData(response.token, nextRole, response.user);
     setPassword("");
     setPasswordConfirmation("");
+    setTermsAccepted(false);
     setLogged(true);
   }
 
@@ -1036,12 +1043,14 @@ export default function App() {
             email={email}
             password={password}
             passwordConfirmation={passwordConfirmation}
+            termsAccepted={termsAccepted}
             onModeChange={setAuthMode}
             onNameChange={setName}
             onPhoneChange={setPhone}
             onEmailChange={setEmail}
             onPasswordChange={setPassword}
             onPasswordConfirmationChange={setPasswordConfirmation}
+            onTermsAcceptedChange={setTermsAccepted}
             submitting={authSubmitting}
             onSubmit={submitLogin}
           />
@@ -1137,3 +1146,4 @@ function notify(title: string, message: string) {
     Alert.alert(title, message);
   }
 }
+
