@@ -496,17 +496,15 @@ export default function App() {
 
   async function addGalleryItem(title: string, image: string) {
     const token = requireAuthToken();
-    if (!token) {
-      return;
+    if (!token || !startAction("save-gallery")) {
+      return false;
     }
 
     try {
       const item = await createGalleryItemRequest(token, { title, image });
       setGallery((current) => [item, ...current]);
-      notify(
-        "Imagem adicionada",
-        `${item.title} foi adicionada ao portfÃ³lio.`,
-      );
+      notify("Imagem adicionada", `${item.title} foi adicionada ao portfolio.`);
+      return true;
     } catch (error) {
       notify(
         "Erro ao salvar",
@@ -514,13 +512,16 @@ export default function App() {
           ? error.message
           : "Nao foi possivel adicionar a imagem.",
       );
+      return false;
+    } finally {
+      finishAction();
     }
   }
 
   async function editGalleryItem(id: string, title: string, image: string) {
     const token = requireAuthToken();
-    if (!token) {
-      return;
+    if (!token || !startAction("save-gallery")) {
+      return false;
     }
 
     try {
@@ -531,6 +532,7 @@ export default function App() {
         ),
       );
       notify("Imagem atualizada", `${item.title} foi salva.`);
+      return true;
     } catch (error) {
       notify(
         "Erro ao salvar",
@@ -538,6 +540,9 @@ export default function App() {
           ? error.message
           : "Nao foi possivel editar a imagem.",
       );
+      return false;
+    } finally {
+      finishAction();
     }
   }
 
@@ -725,14 +730,14 @@ export default function App() {
       finishAction();
     }
   }
-  async function createProduct(name: string, price: number) {
+  async function createProduct(name: string, price: number, image?: string) {
     const token = requireAuthToken();
     if (!token || !startAction("save-product")) {
       return false;
     }
 
     try {
-      const product = await createProductRequest(token, name, price);
+      const product = await createProductRequest(token, name, price, image);
       setProducts((current) => [...current, product]);
       notify("Produto cadastrado", `${product.name} foi adicionado.`);
       return true;
@@ -750,7 +755,7 @@ export default function App() {
   }
   async function editProduct(
     id: string,
-    payload: Partial<Pick<Product, "name" | "price" | "available">>,
+    payload: Partial<Pick<Product, "name" | "price" | "available" | "image">>,
   ) {
     const token = requireAuthToken();
     if (!token || !startAction("save-product")) {

@@ -165,20 +165,24 @@ export function AdminApp({
     payload: Omit<RecurringBooking, "id">,
   ) => void | Promise<void>;
   onRemoveRecurring: (id: string) => void | Promise<void>;
-  onAddGalleryItem: (title: string, image: string) => void | Promise<void>;
+  onAddGalleryItem: (
+    title: string,
+    image: string,
+  ) => boolean | void | Promise<boolean | void>;
   onUpdateGalleryItem: (
     id: string,
     title: string,
     image: string,
-  ) => void | Promise<void>;
+  ) => boolean | void | Promise<boolean | void>;
   onRemoveGalleryItem: (id: string) => void | Promise<void>;
   onAddProduct: (
     name: string,
     price: number,
+    image?: string,
   ) => boolean | void | Promise<boolean | void>;
   onUpdateProduct: (
     id: string,
-    payload: Partial<Pick<Product, "name" | "price" | "available">>,
+    payload: Partial<Pick<Product, "name" | "price" | "available" | "image">>,
   ) => boolean | void | Promise<boolean | void>;
   onRemoveProduct: (id: string) => boolean | void | Promise<boolean | void>;
   onEditBusinessHours: React.Dispatch<React.SetStateAction<BusinessHours>>;
@@ -211,6 +215,7 @@ export function AdminApp({
   const [productModalVisible, setProductModalVisible] = useState(false);
   const [newProductName, setNewProductName] = useState("");
   const [newProductPrice, setNewProductPrice] = useState("");
+  const [newProductImage, setNewProductImage] = useState("");
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [galleryModalVisible, setGalleryModalVisible] = useState(false);
   const [newGalleryTitle, setNewGalleryTitle] = useState("");
@@ -353,6 +358,7 @@ export function AdminApp({
     setEditingProductId(product?.id ?? null);
     setNewProductName(product?.name ?? "");
     setNewProductPrice(product ? String(product.price).replace(".", ",") : "");
+    setNewProductImage(product?.image ?? "");
     setProductModalVisible(true);
   }
 
@@ -363,13 +369,13 @@ export function AdminApp({
     setGalleryModalVisible(true);
   }
 
-  async function pickGalleryImage() {
+  async function pickImage(onPick: (uri: string) => void) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
       Alert.alert(
-        "Permissão necessária",
-        "Autorize o acesso á galeria para selecionar uma foto.",
+        "Permissao necessaria",
+        "Autorize o acesso a galeria para selecionar uma foto.",
       );
       return;
     }
@@ -382,8 +388,16 @@ export function AdminApp({
     });
 
     if (!result.canceled) {
-      setNewGalleryImage(result.assets[0]?.uri ?? "");
+      onPick(result.assets[0]?.uri ?? "");
     }
+  }
+
+  function pickProductImage() {
+    void pickImage(setNewProductImage);
+  }
+
+  function pickGalleryImage() {
+    void pickImage(setNewGalleryImage);
   }
 
   async function confirmManualBooking() {
@@ -474,13 +488,19 @@ export function AdminApp({
     const name = newProductName.trim();
     const price = Number(newProductPrice.replace(",", "."));
 
-    if (!name || !Number.isFinite(price) || price <= 0) {
+    const image = newProductImage.trim();
+
+    if (!name || !Number.isFinite(price) || price <= 0 || !image) {
+      Alert.alert(
+        "Dados incompletos",
+        "Informe nome, valor e selecione uma imagem.",
+      );
       return;
     }
 
     const success = editingProductId
-      ? await onUpdateProduct(editingProductId, { name, price })
-      : await onAddProduct(name, price);
+      ? await onUpdateProduct(editingProductId, { name, price, image })
+      : await onAddProduct(name, price, image);
 
     if (success === false) {
       return;
@@ -490,17 +510,27 @@ export function AdminApp({
   }
 
   async function confirmGalleryItem() {
+    if (saving) {
+      return;
+    }
+
     const title = newGalleryTitle.trim();
     const image = newGalleryImage.trim();
 
     if (!title || !image) {
+      Alert.alert(
+        "Dados incompletos",
+        "Informe o nome e selecione uma imagem.",
+      );
       return;
     }
 
-    if (editingGalleryId) {
-      await onUpdateGalleryItem(editingGalleryId, title, image);
-    } else {
-      await onAddGalleryItem(title, image);
+    const success = editingGalleryId
+      ? await onUpdateGalleryItem(editingGalleryId, title, image)
+      : await onAddGalleryItem(title, image);
+
+    if (success === false) {
+      return;
     }
 
     setGalleryModalVisible(false);
@@ -763,8 +793,10 @@ export function AdminApp({
         editingProductId={editingProductId}
         name={newProductName}
         price={newProductPrice}
+        image={newProductImage}
         onChangeName={setNewProductName}
         onChangePrice={setNewProductPrice}
+        onPickImage={pickProductImage}
         saving={saving}
         onConfirm={confirmProduct}
         onClose={() => setProductModalVisible(false)}
@@ -776,6 +808,7 @@ export function AdminApp({
         image={newGalleryImage}
         onChangeTitle={setNewGalleryTitle}
         onPickImage={pickGalleryImage}
+        saving={saving}
         onConfirm={confirmGalleryItem}
         onClose={() => setGalleryModalVisible(false)}
       />

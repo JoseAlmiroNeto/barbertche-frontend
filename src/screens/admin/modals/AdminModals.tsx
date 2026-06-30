@@ -351,18 +351,22 @@ export function ProductModal({
   editingProductId,
   name,
   price,
+  image,
   saving,
   onChangeName,
   onChangePrice,
+  onPickImage,
   onConfirm,
   onClose,
 }: BaseModalProps & {
   editingProductId: string | null;
   name: string;
   price: string;
+  image: string;
   saving?: boolean;
   onChangeName: (value: string) => void;
   onChangePrice: (value: string) => void;
+  onPickImage: () => void;
   onConfirm: () => void;
 }) {
   return (
@@ -400,6 +404,20 @@ export function ProductModal({
               keyboardType="decimal-pad"
               style={styles.input}
             />
+            {image ? (
+              <Image
+                source={{ uri: image }}
+                style={styles.galleryPickerPreview}
+              />
+            ) : null}
+            <TouchableOpacity
+              style={styles.secondaryButtonFull}
+              onPress={onPickImage}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {image ? "Trocar foto" : "Selecionar foto"}
+              </Text>
+            </TouchableOpacity>
           </ScrollView>
           <View style={styles.modalActions}>
             <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
@@ -432,6 +450,7 @@ export function GalleryModal({
   editingGalleryId,
   title,
   image,
+  saving,
   onChangeTitle,
   onPickImage,
   onConfirm,
@@ -440,6 +459,7 @@ export function GalleryModal({
   editingGalleryId: string | null;
   title: string;
   image: string;
+  saving?: boolean;
   onChangeTitle: (value: string) => void;
   onPickImage: () => void;
   onConfirm: () => void;
@@ -491,10 +511,20 @@ export function GalleryModal({
             <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
               <Text style={styles.secondaryButtonText}>Cancelar</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.primaryButton} onPress={onConfirm}>
-              <Text style={styles.primaryButtonText}>
-                {editingGalleryId ? "Salvar" : "Cadastrar"}
-              </Text>
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                saving && styles.primaryButtonDisabled,
+              ]}
+              onPress={saving ? undefined : onConfirm}
+            >
+              {saving ? (
+                <ActivityIndicator color="#100d0a" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {editingGalleryId ? "Salvar" : "Cadastrar"}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
