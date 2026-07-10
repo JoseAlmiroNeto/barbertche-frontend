@@ -330,7 +330,7 @@ async function uploadImageIfNeeded(
 function normalizeAppointment(appointment: AppointmentResponse): Appointment {
   return {
     ...appointment,
-    status: "confirmed",
+    status: appointment.status ?? "confirmed",
   };
 }
 

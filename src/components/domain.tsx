@@ -45,6 +45,12 @@ export function AppointmentCard({
 }) {
   const service = serviceById(services, appointment.serviceId);
   const sourceLabel = appointment.source === "recurring" ? "Fixo semanal" : appointment.source === "manual" ? "Manual" : "App";
+  const statusLabel = {
+    pending: "Pendente",
+    confirmed: "Confirmado",
+    completed: "Concluído",
+    cancelled: "Cancelado",
+  }[appointment.status];
   return (
     <View style={[styles.card, compact && styles.compactCard]}>
       <View style={styles.cardTop}>
@@ -57,6 +63,7 @@ export function AppointmentCard({
         </View>
       </View>
       <Text style={styles.cardText}>{service.name} - {money(service.price)}</Text>
+      <Text style={styles.cardText}>Status: {statusLabel}</Text>
       {actions ? (
         <View style={styles.actionRow}>
           {actions.map((action) => (

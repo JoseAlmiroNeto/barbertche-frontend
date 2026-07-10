@@ -36,10 +36,9 @@ import {
   ProfilePanel,
 } from "../components/domain";
 import { styles } from "../theme";
-import { dateLabel, weekdayOf } from "../utils/date";
+import { dateLabel } from "../utils/date";
 import { money } from "../utils/time";
-
-type AppointmentView = "upcoming" | "history";
+import { useClientBookingFlow } from "../features/client/useClientBookingFlow";
 
 export function ClientApp({
   tab,
@@ -89,100 +88,19 @@ export function ClientApp({
   onLogout: () => void;
   onAdmin: () => void;
 }) {
-  const [appointmentView, setAppointmentView] =
-    useState<AppointmentView>("upcoming");
-  const [bookingServiceId, setBookingServiceId] = useState<string | null>(null);
-  const [bookingDate, setBookingDate] = useState<string | null>(null);
-  const [bookingSlot, setBookingSlot] = useState<string | null>(null);
-  const [confirmVisible, setConfirmVisible] = useState(false);
-  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const upcomingAppointments = clientAppointments.filter(
-    (appointment) =>
-      appointment.status === "confirmed" && appointment.date >= todayIso,
-  );
-  const historyAppointments = clientAppointments.filter(
-    (appointment) =>
-      appointment.status === "confirmed" && appointment.date < todayIso,
-  );
-  const selectedAppointments =
-    appointmentView === "upcoming" ? upcomingAppointments : historyAppointments;
-  const draftService =
-    services.find((service) => service.id === bookingServiceId) ?? null;
-  const canShowSlots = Boolean(draftService && bookingDate);
-  const visibleAvailableSlots = canShowSlots ? availableSlots : [];
-  const openDateOptions = dateOptions.filter((date) => {
-    const hours = businessHours[weekdayOf(date)];
-    return Boolean(hours) && !closedDates.includes(date);
+  const flow = useClientBookingFlow({
+    tab, services, dateOptions, availableSlots, clientAppointments,
+    businessHours, closedDates, savingAppointment, onTabChange, onDateChange,
+    onServiceChange, onBookSlot, onCancelAppointment, onRescheduleAppointment,
   });
-  const bottomActiveTab =
-    tab === "book" ? "mine" : tab === "gallery" ? "home" : tab;
-
-  function startNewBooking() {
-    setReschedulingId(null);
-    setBookingServiceId(null);
-    setBookingDate(null);
-    setBookingSlot(null);
-    setConfirmVisible(false);
-    onTabChange("book");
-  }
-
-  function startReschedule(appointment: Appointment) {
-    setReschedulingId(appointment.id);
-    setBookingServiceId(appointment.serviceId);
-    setBookingDate(null);
-    setBookingSlot(null);
-    setConfirmVisible(false);
-    onServiceChange(appointment.serviceId);
-    onTabChange("book");
-  }
-
-  function handleServiceSelect(serviceId: string) {
-    setBookingServiceId(serviceId);
-    setBookingSlot(null);
-    onServiceChange(serviceId);
-  }
-
-  function handleDateSelect(date: string) {
-    setBookingDate(date);
-    setBookingSlot(null);
-    onDateChange(date);
-  }
-
-  async function confirmBooking() {
-    if (!bookingSlot || !bookingDate || savingAppointment) {
-      return;
-    }
-
-    const success = reschedulingId
-      ? await onRescheduleAppointment(reschedulingId, bookingDate, bookingSlot)
-      : await onBookSlot(bookingSlot);
-
-    if (success === false) {
-      return;
-    }
-
-    setConfirmVisible(false);
-    setReschedulingId(null);
-    setBookingSlot(null);
-    setAppointmentView("upcoming");
-    onTabChange("mine");
-  }
-
-  async function confirmCancelAppointment() {
-    if (!cancelTarget || savingAppointment) {
-      return;
-    }
-
-    const success = await onCancelAppointment(cancelTarget.id);
-    if (success === false) {
-      return;
-    }
-
-    setCancelTarget(null);
-    setAppointmentView("upcoming");
-  }
+  const {
+    appointmentView, setAppointmentView, bookingServiceId, bookingDate,
+    bookingSlot, setBookingSlot, confirmVisible, setConfirmVisible,
+    reschedulingId, cancelTarget, setCancelTarget, todayIso, upcomingAppointments,
+    selectedAppointments, draftService, visibleAvailableSlots, openDateOptions,
+    bottomActiveTab, startNewBooking, startReschedule, repeatAppointment, handleServiceSelect,
+    handleDateSelect, confirmBooking, confirmCancelAppointment,
+  } = flow;
 
   return (
     <>
@@ -353,7 +271,14 @@ export function ClientApp({
                 appointment={appointment}
                 services={services}
                 actions={
-                  appointment.status === "confirmed" &&
+                  appointmentView === "history"
+                    ? [
+                        {
+                          label: "Agendar novamente",
+                          onPress: () => repeatAppointment(appointment),
+                        },
+                      ]
+                    : appointment.status === "confirmed" &&
                   appointment.date >= todayIso &&
                   appointment.source !== "recurring"
                     ? [

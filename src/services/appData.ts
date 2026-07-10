@@ -8,7 +8,7 @@ import type {
   RecurringBooking,
   Service,
 } from "../types";
-import { apiRequest, type AuthUser } from "./api";
+import { ApiError, apiRequest, type AuthUser } from "./api";
 
 type BackendAppointment = Omit<Appointment, "status"> & {
   status?: Appointment["status"];
@@ -51,6 +51,7 @@ export type AppData = {
   closedDates: string[];
   gallery: GalleryItem[];
   products: Product[];
+  warnings: string[];
 };
 
 const fallbackProductImage =
@@ -59,23 +60,27 @@ const fallbackGalleryImage =
   "https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=1200&q=80";
 
 export async function loadAppData(token: string): Promise<AppData> {
-  const [
-    clients,
-    services,
-    appointments,
-    recurring,
-    settings,
-    products,
-    gallery,
-  ] = await Promise.all([
+  const essentialPromise = Promise.all([
     apiRequest<Client[]>("/clients", { token }),
     apiRequest<Service[]>("/services", { token }),
     apiRequest<BackendAppointment[]>("/appointments", { token }),
     apiRequest<RecurringBooking[]>("/appointments/recurring", { token }),
     apiRequest<SettingsResponse>("/settings", { token }),
-    apiRequest<BackendProduct[]>("/products", { token }),
-    apiRequest<BackendGalleryItem[]>("/gallery", { token }),
+  ] as const);
+  const productsPromise = loadOptional(
+    () => apiRequest<BackendProduct[]>("/products", { token }),
+    "produtos",
+  );
+  const galleryPromise = loadOptional(
+    () => apiRequest<BackendGalleryItem[]>("/gallery", { token }),
+    "galeria",
+  );
+  const [essential, productsResult, galleryResult] = await Promise.all([
+    essentialPromise,
+    productsPromise,
+    galleryPromise,
   ]);
+  const [clients, services, appointments, recurring, settings] = essential;
 
   return {
     clients,
@@ -85,8 +90,9 @@ export async function loadAppData(token: string): Promise<AppData> {
     blocks: settings.blocks ?? [],
     businessHours: settings.businessHours,
     closedDates: normalizeClosedDates(settings.closedDates ?? []),
-    gallery: gallery.map(normalizeGalleryItem),
-    products: products.map(normalizeProduct),
+    gallery: galleryResult.data.map(normalizeGalleryItem),
+    products: productsResult.data.map(normalizeProduct),
+    warnings: collectWarnings(productsResult, galleryResult),
   };
 }
 
@@ -98,13 +104,25 @@ export async function loadClientAppData(
     throw new Error("Cliente autenticado nao encontrado.");
   }
 
-  const [services, mine, settings, products, gallery] = await Promise.all([
+  const essentialPromise = Promise.all([
     apiRequest<Service[]>("/services", { token }),
     apiRequest<MyAppointmentsResponse>("/appointments/me", { token }),
     apiRequest<SettingsResponse>("/settings", { token }),
-    apiRequest<BackendProduct[]>("/products", { token }),
-    apiRequest<BackendGalleryItem[]>("/gallery", { token }),
+  ] as const);
+  const productsPromise = loadOptional(
+    () => apiRequest<BackendProduct[]>("/products", { token }),
+    "produtos",
+  );
+  const galleryPromise = loadOptional(
+    () => apiRequest<BackendGalleryItem[]>("/gallery", { token }),
+    "galeria",
+  );
+  const [essential, productsResult, galleryResult] = await Promise.all([
+    essentialPromise,
+    productsPromise,
+    galleryPromise,
   ]);
+  const [services, mine, settings] = essential;
 
   return {
     clients: [user.client],
@@ -114,15 +132,49 @@ export async function loadClientAppData(
     blocks: settings.blocks ?? [],
     businessHours: settings.businessHours,
     closedDates: normalizeClosedDates(settings.closedDates ?? []),
-    gallery: gallery.map(normalizeGalleryItem),
-    products: products.map(normalizeProduct),
+    gallery: galleryResult.data.map(normalizeGalleryItem),
+    products: productsResult.data.map(normalizeProduct),
+    warnings: collectWarnings(productsResult, galleryResult),
   };
+}
+
+type OptionalResult<T> = { data: T[]; warning?: string };
+
+async function loadOptional<T>(
+  request: () => Promise<T[]>,
+  label: string,
+): Promise<OptionalResult<T>> {
+  try {
+    return { data: await retryOnce(request) };
+  } catch {
+    return {
+      data: [],
+      warning: `Não foi possível carregar ${label}. Tente novamente mais tarde.`,
+    };
+  }
+}
+
+async function retryOnce<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === "unauthorized") {
+      throw error;
+    }
+    return request();
+  }
+}
+
+function collectWarnings(...results: OptionalResult<unknown>[]) {
+  return results.flatMap((result) =>
+    result.warning ? [result.warning] : [],
+  );
 }
 
 function normalizeAppointment(appointment: BackendAppointment): Appointment {
   return {
     ...appointment,
-    status: "confirmed",
+    status: appointment.status ?? "confirmed",
   };
 }
 

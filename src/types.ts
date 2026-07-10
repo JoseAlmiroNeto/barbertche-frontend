@@ -1,7 +1,11 @@
 export type Role = "client" | "admin";
 export type ClientTab = "home" | "book" | "mine" | "gallery" | "products" | "profile";
 export type AdminTab = "dashboard" | "schedule" | "clients" | "more" | "services" | "recurring" | "gallery" | "products" | "settings";
-export type AppointmentStatus = "confirmed";
+export type AppointmentStatus =
+  | "pending"
+  | "confirmed"
+  | "completed"
+  | "cancelled";
 
 export type Client = {
   id: string;
