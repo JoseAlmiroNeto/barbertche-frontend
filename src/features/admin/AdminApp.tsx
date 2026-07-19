@@ -13,6 +13,7 @@ import * as ImagePicker from "expo-image-picker";
 import type {
   AdminTab,
   Appointment,
+  AppointmentStatus,
   BusinessHours,
   Client,
   GalleryItem,
@@ -20,7 +21,7 @@ import type {
   Product,
   RecurringBooking,
   Service,
-} from "../types";
+} from "../../types";
 import {
   BottomTabs,
   ConfirmActionModal,
@@ -28,7 +29,7 @@ import {
   InfoRow,
   MiniButton,
   SectionTitle,
-} from "../components/common";
+} from "../../components/common";
 import {
   AdminClientsSection,
   AdminDashboardSection,
@@ -37,7 +38,7 @@ import {
   AdminProductsSection,
   AdminRecurringSection,
   AdminServicesSection,
-} from "./admin/AdminSections";
+} from "./components/AdminSections";
 import {
   ClientModal,
   GalleryModal,
@@ -46,11 +47,11 @@ import {
   ProductModal,
   RecurringModal,
   ServiceModal,
-} from "./admin/modals/AdminModals";
-import { styles } from "../theme";
-import { dateLabel, weekdayName, weekdayOf } from "../utils/date";
-import { addMinutes, money, toMinutes, toTime } from "../utils/time";
-import { serviceById } from "../utils/schedule";
+} from "./components/AdminModals";
+import { styles } from "../../theme";
+import { dateLabel, weekdayName, weekdayOf } from "../../utils/date";
+import { addMinutes, money, toMinutes, toTime } from "../../utils/time";
+import { serviceById } from "../../utils/schedule";
 
 function buildStartOptions(open: string, close: string, duration: number) {
   const slots: string[] = [];
@@ -69,6 +70,15 @@ function toLocalIsoDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function appointmentStatusLabel(status: AppointmentStatus) {
+  return {
+    SCHEDULED: "Agendado",
+    COMPLETED: "Concluído",
+    CANCELED: "Cancelado",
+    NO_SHOW: "Não compareceu",
+  }[status];
 }
 
 type ConfirmAction = {
@@ -97,7 +107,10 @@ export function AdminApp({
   onDateChange,
   onManualBooking,
   onManualBlock,
+  onRemoveManualBlock,
   onAddClient,
+  onUpdateClient,
+  onRemoveClient,
   onAddService,
   onUpdateService,
   onRemoveService,
@@ -114,6 +127,7 @@ export function AdminApp({
   onSaveBusinessHour,
   onAddClosedDate,
   onRemoveClosedDate,
+  onUpdateAppointmentStatus,
   saving,
   onLogout,
 }: {
@@ -143,7 +157,10 @@ export function AdminApp({
     duration: number,
     reason: string,
   ) => boolean | void | Promise<boolean | void>;
-  onAddClient: (name: string, phone: string) => void | Promise<void>;
+  onRemoveManualBlock: (id: string) => boolean | void | Promise<boolean | void>;
+  onAddClient: (name: string, phone: string) => boolean | void | Promise<boolean | void>;
+  onUpdateClient: (id: string, name: string, phone: string) => boolean | void | Promise<boolean | void>;
+  onRemoveClient: (id: string) => boolean | void | Promise<boolean | void>;
   onAddService: (
     name: string,
     price: number,
@@ -192,6 +209,10 @@ export function AdminApp({
   ) => void | Promise<void>;
   onAddClosedDate: (date: string) => void | Promise<void>;
   onRemoveClosedDate: (date: string) => void | Promise<void>;
+  onUpdateAppointmentStatus: (
+    id: string,
+    status: AppointmentStatus,
+  ) => boolean | void | Promise<boolean | void>;
   saving?: boolean;
   onLogout: () => void;
 }) {
@@ -208,6 +229,7 @@ export function AdminApp({
   const [blockReason, setBlockReason] = useState("Bloqueio manual");
   const [newClientName, setNewClientName] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [newServiceName, setNewServiceName] = useState("");
   const [newServicePrice, setNewServicePrice] = useState("");
   const [newServiceDuration, setNewServiceDuration] = useState("");
@@ -241,7 +263,9 @@ export function AdminApp({
   const selectedRecurringService = serviceById(services, recurringServiceId);
   const selectedDateHours = businessHours[weekdayOf(selectedDate)];
   const selectedDateBookings = getBookingsForDate(selectedDate);
-  const occupiedStarts = selectedDateBookings.map((booking) => booking.start);
+  const occupiedStarts = selectedDateBookings
+    .filter((booking) => booking.status === "SCHEDULED")
+    .map((booking) => booking.start);
   const manualBookingSlots = selectedDateHours
     ? buildStartOptions(
         selectedDateHours.open,
@@ -260,7 +284,11 @@ export function AdminApp({
         selectedRecurringService.duration,
       )
     : [];
-  const dashboardWeekDates = dateOptions.slice(0, 7);
+  const dashboardWeekDates = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    return toLocalIsoDate(date);
+  });
   const dashboardWeekBookings = dashboardWeekDates.flatMap((date) =>
     getBookingsForDate(date),
   );
@@ -297,9 +325,10 @@ export function AdminApp({
     setManualBlockVisible(true);
   }
 
-  function openClientModal() {
-    setNewClientName("");
-    setNewClientPhone("");
+  function openClientModal(client?: Client) {
+    setEditingClientId(client?.id ?? null);
+    setNewClientName(client?.name ?? "");
+    setNewClientPhone(client?.phone ?? "");
     setClientModalVisible(true);
   }
 
@@ -452,8 +481,31 @@ export function AdminApp({
       return;
     }
 
-    await onAddClient(name, phone);
+    const success = editingClientId
+      ? await onUpdateClient(editingClientId, name, phone)
+      : await onAddClient(name, phone);
+    if (success === false) {
+      return;
+    }
     setClientModalVisible(false);
+  }
+
+  function requestRemoveClient(client: Client) {
+    requestConfirmation({
+      title: "Excluir cliente?",
+      message: `O cadastro de ${client.name} será removido. O histórico de agendamentos será preservado.`,
+      confirmLabel: "Excluir",
+      onConfirm: () => onRemoveClient(client.id),
+    });
+  }
+
+  function requestRemoveManualBlock(block: ManualBlock) {
+    requestConfirmation({
+      title: "Remover bloqueio?",
+      message: `O horário de ${block.start} às ${block.end} voltará a ficar disponível.`,
+      confirmLabel: "Remover",
+      onConfirm: () => onRemoveManualBlock(block.id),
+    });
   }
 
   async function confirmNewService() {
@@ -609,6 +661,24 @@ export function AdminApp({
     });
   }
 
+  function requestAppointmentStatus(
+    appointment: Appointment,
+    status: AppointmentStatus,
+  ) {
+    const labels: Record<AppointmentStatus, string> = {
+      SCHEDULED: "reabrir",
+      COMPLETED: "concluir",
+      CANCELED: "cancelar",
+      NO_SHOW: "marcar como não compareceu",
+    };
+    requestConfirmation({
+      title: "Atualizar agendamento?",
+      message: `Deseja ${labels[status]} o agendamento de ${appointment.clientName}?`,
+      confirmLabel: status === "CANCELED" ? "Cancelar" : "Confirmar",
+      onConfirm: () => onUpdateAppointmentStatus(appointment.id, status),
+    });
+  }
+
   return (
     <>
       <ScrollView
@@ -662,6 +732,8 @@ export function AdminApp({
               closedDates={closedDates}
               businessHours={businessHours}
               getBookingsForDate={getBookingsForDate}
+              onRequestStatus={requestAppointmentStatus}
+              onRequestRemoveBlock={requestRemoveManualBlock}
             />
           </>
         ) : null}
@@ -669,7 +741,8 @@ export function AdminApp({
         {tab === "clients" ? (
           <AdminClientsSection
             clients={clients}
-            onAddClient={openClientModal}
+            onOpenClient={openClientModal}
+            onRequestRemoveClient={requestRemoveClient}
           />
         ) : null}
 
@@ -741,6 +814,7 @@ export function AdminApp({
       />
       <ClientModal
         visible={clientModalVisible}
+        editingClientId={editingClientId}
         name={newClientName}
         phone={newClientPhone}
         onChangeName={setNewClientName}
@@ -1141,6 +1215,8 @@ function AdminAgendaList({
   closedDates,
   businessHours,
   getBookingsForDate,
+  onRequestStatus,
+  onRequestRemoveBlock,
 }: {
   selectedDate: string;
   services: Service[];
@@ -1148,16 +1224,24 @@ function AdminAgendaList({
   closedDates: string[];
   businessHours: BusinessHours;
   getBookingsForDate: (date: string) => Appointment[];
+  onRequestStatus: (
+    appointment: Appointment,
+    status: AppointmentStatus,
+  ) => void;
+  onRequestRemoveBlock: (block: ManualBlock) => void;
 }) {
   const visibleDates = [selectedDate];
   return (
     <View>
       {visibleDates.map((date) => {
         const items = getBookingsForDate(date);
+        const scheduledItems = items.filter(
+          (appointment) => appointment.status === "SCHEDULED",
+        );
         const dayBlocks = blocks.filter((block) => block.date === date);
         const hours = businessHours[weekdayOf(date)];
         const isClosed = closedDates.includes(date) || !hours;
-        const bookedMinutes = items.reduce(
+        const bookedMinutes = scheduledItems.reduce(
           (total, appointment) =>
             total +
             Math.max(
@@ -1197,14 +1281,14 @@ function AdminAgendaList({
               </View>
               <View style={styles.adminAgendaCounter}>
                 <Text style={styles.adminAgendaCounterValue}>
-                  {items.length}
+                  {scheduledItems.length}
                 </Text>
                 <Text style={styles.adminAgendaCounterLabel}>atend.</Text>
               </View>
             </View>
             <View style={styles.adminAgendaSummary}>
               <Text style={styles.adminAgendaSummaryText}>
-                {items.length} atendimentos
+                {scheduledItems.length} agendados
               </Text>
               <Text style={styles.adminAgendaSummaryMuted}>
                 {busyPercent}% ocupado
@@ -1245,11 +1329,7 @@ function AdminAgendaList({
                               {slot.appointment.clientName}
                             </Text>
                             <Text style={styles.timelineBadge}>
-                              {slot.appointment.source === "recurring"
-                                ? "Fixo"
-                                : slot.appointment.source === "manual"
-                                  ? "Manual"
-                                  : "App"}
+                              {appointmentStatusLabel(slot.appointment.status)}
                             </Text>
                           </View>
                           <Text style={styles.cardText}>
@@ -1258,6 +1338,59 @@ function AdminAgendaList({
                           <Text style={styles.price}>
                             {money(service.price)}
                           </Text>
+                          <Text style={styles.cardText}>
+                            Origem: {slot.appointment.source === "recurring"
+                              ? "Fixo"
+                              : slot.appointment.source === "manual"
+                                ? "Manual"
+                                : "App"}
+                          </Text>
+                          {slot.appointment.source !== "recurring" ? (
+                            <View style={styles.actionRow}>
+                              {slot.appointment.status === "SCHEDULED" ? (
+                                <>
+                                  <MiniButton
+                                    label="Concluir"
+                                    onPress={() =>
+                                      onRequestStatus(
+                                        slot.appointment!,
+                                        "COMPLETED",
+                                      )
+                                    }
+                                  />
+                                  <MiniButton
+                                    label="Faltou"
+                                    onPress={() =>
+                                      onRequestStatus(
+                                        slot.appointment!,
+                                        "NO_SHOW",
+                                      )
+                                    }
+                                  />
+                                  <MiniButton
+                                    label="Cancelar"
+                                    danger
+                                    onPress={() =>
+                                      onRequestStatus(
+                                        slot.appointment!,
+                                        "CANCELED",
+                                      )
+                                    }
+                                  />
+                                </>
+                              ) : (
+                                <MiniButton
+                                  label="Reabrir"
+                                  onPress={() =>
+                                    onRequestStatus(
+                                      slot.appointment!,
+                                      "SCHEDULED",
+                                    )
+                                  }
+                                />
+                              )}
+                            </View>
+                          ) : null}
                         </View>
                       </View>
                     );
@@ -1283,6 +1416,13 @@ function AdminAgendaList({
                           <Text style={styles.cardText}>
                             {slot.block.reason} - {slot.start} ás {slot.end}
                           </Text>
+                          <View style={styles.actionRow}>
+                            <MiniButton
+                              label="Remover"
+                              danger
+                              onPress={() => onRequestRemoveBlock(slot.block!)}
+                            />
+                          </View>
                         </View>
                       </View>
                     );

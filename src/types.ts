@@ -1,73 +1,21 @@
-export type Role = "client" | "admin";
-export type ClientTab = "home" | "book" | "mine" | "gallery" | "products" | "profile";
-export type AdminTab = "dashboard" | "schedule" | "clients" | "more" | "services" | "recurring" | "gallery" | "products" | "settings";
-export type AppointmentStatus =
-  | "pending"
-  | "confirmed"
-  | "completed"
-  | "cancelled";
-
-export type Client = {
-  id: string;
-  name: string;
-  phone: string;
-};
-
-export type Service = {
-  id: string;
-  name: string;
-  duration: number;
-  price: number;
-  active: boolean;
-};
-
-export type Appointment = {
-  id: string;
-  date: string;
-  start: string;
-  end: string;
-  clientId?: string;
-  clientName: string;
-  serviceId: string;
-  status: AppointmentStatus;
-  source: "app" | "manual" | "recurring";
-};
-
-export type RecurringBooking = {
-  id: string;
-  clientId: string;
-  serviceId: string;
-  weekday: number;
-  start: string;
-  active: boolean;
-};
-
-export type ManualBlock = {
-  id: string;
-  date: string;
-  start: string;
-  end: string;
-  reason: string;
-};
-
-export type Product = {
-  id: string;
-  name: string;
-  image: string;
-  description: string;
-  price: number;
-  available: boolean;
-};
-
-export type GalleryItem = {
-  id: string;
-  title: string;
-  image: string;
-};
-
-export type Interval = {
-  start: string;
-  end: string;
-};
-
-export type BusinessHours = Record<number, { open: string; close: string } | null>;
+// Compatibilidade para componentes compartilhados. Novos módulos devem importar
+// diretamente do domínio responsável pelo tipo.
+export type {
+  Appointment,
+  AppointmentStatus,
+  Interval,
+  RecurringBooking,
+} from "./features/appointments/appointments.types";
+export type { Client } from "./features/clients/clients.types";
+export type { GalleryItem } from "./features/gallery/gallery.types";
+export type {
+  AdminTab,
+  ClientTab,
+  Role,
+} from "./features/navigation/navigation.types";
+export type { Product } from "./features/products/products.types";
+export type { Service } from "./features/services/services.types";
+export type {
+  BusinessHours,
+  ManualBlock,
+} from "./features/settings/settings.types";

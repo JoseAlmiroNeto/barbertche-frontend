@@ -15,9 +15,9 @@ export const initialServices: Service[] = [
 ];
 
 export const initialAppointments: Appointment[] = [
-  { id: "a1", date: isoForOffset(1), start: "09:30", end: "10:15", clientId: "c1", clientName: "Mateus Silva", serviceId: "s1", status: "confirmed", source: "app" },
-  { id: "a2", date: isoForOffset(1), start: "14:00", end: "15:15", clientName: "Cliente balcão", serviceId: "s3", status: "confirmed", source: "manual" },
-  { id: "a3", date: isoForOffset(2), start: "11:00", end: "11:30", clientId: "c3", clientName: "Pedro Alves", serviceId: "s2", status: "confirmed", source: "app" }
+  { id: "a1", date: isoForOffset(1), start: "09:30", end: "10:15", clientId: "c1", clientName: "Mateus Silva", serviceId: "s1", status: "SCHEDULED", source: "app" },
+  { id: "a2", date: isoForOffset(1), start: "14:00", end: "15:15", clientName: "Cliente balcão", serviceId: "s3", status: "SCHEDULED", source: "manual" },
+  { id: "a3", date: isoForOffset(2), start: "11:00", end: "11:30", clientId: "c3", clientName: "Pedro Alves", serviceId: "s2", status: "SCHEDULED", source: "app" }
 ];
 
 export const initialRecurring: RecurringBooking[] = [

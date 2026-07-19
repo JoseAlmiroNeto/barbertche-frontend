@@ -1,12 +1,12 @@
 ﻿import React from "react";
 import { Text, View } from "react-native";
-import type { AdminTab, Appointment, BusinessHours, Client, GalleryItem, ManualBlock, Product, RecurringBooking, Service } from "../../types";
-import { HeroCard, IconButton, InfoRow, ManagementCard, MiniButton, SectionTitle } from "../../components/common";
-import { GalleryGrid } from "../../components/domain";
-import { styles } from "../../theme";
-import { weekdayName, weekdayOf } from "../../utils/date";
-import { money, overlaps, toMinutes, toTime } from "../../utils/time";
-import { serviceById } from "../../utils/schedule";
+import type { AdminTab, Appointment, BusinessHours, Client, GalleryItem, ManualBlock, Product, RecurringBooking, Service } from "../../../types";
+import { HeroCard, IconButton, InfoRow, ManagementCard, MiniButton, SectionTitle } from "../../../components/common";
+import { GalleryGrid } from "../../gallery/GalleryComponents";
+import { styles } from "../../../theme";
+import { weekdayName, weekdayOf } from "../../../utils/date";
+import { money, overlaps, toMinutes, toTime } from "../../../utils/time";
+import { serviceById } from "../../../utils/schedule";
 
 export function AdminDashboardSection({
   todayDate,
@@ -31,12 +31,18 @@ export function AdminDashboardSection({
   closedDates: string[];
   onTabChange: (tab: AdminTab) => void;
 }) {
-  const todayRevenue = bookingsToday.reduce((total, booking) => total + serviceById(services, booking.serviceId).price, 0);
+  const completedToday = bookingsToday.filter(
+    (booking) => booking.status === "COMPLETED",
+  );
+  const completedWeek = bookingsWeek.filter(
+    (booking) => booking.status === "COMPLETED",
+  );
+  const todayRevenue = completedToday.reduce((total, booking) => total + serviceById(services, booking.serviceId).price, 0);
   const activeRecurring = recurring.filter((item) => item.active);
   const recurringClients = new Set(activeRecurring.map((item) => item.clientId)).size;
   const freeSlotsToday = countFreeSlotsToday(todayDate, bookingsToday, blocks, businessHours, closedDates);
-  const topServices = getTopServices(bookingsWeek, services);
-  const busiestDay = getBusiestDay(weekDates, bookingsWeek);
+  const topServices = getTopServices(completedWeek, services);
+  const busiestDay = getBusiestDay(weekDates, completedWeek);
 
   return (
     <>
@@ -50,11 +56,11 @@ export function AdminDashboardSection({
       <View style={styles.dashboardHeroCard}>
         <Text style={styles.dashboardEyebrow}>Faturamento do dia</Text>
         <Text style={styles.dashboardRevenue}>{money(todayRevenue)}</Text>
-        <Text style={styles.dashboardMuted}>{bookingsToday.length} atendimentos confirmados hoje</Text>
+        <Text style={styles.dashboardMuted}>{completedToday.length} atendimentos concluídos hoje</Text>
       </View>
 
       <View style={styles.metricGrid}>
-        <DashboardMetric label="Atend. semana" value={`${bookingsWeek.length}`} detail={busiestDay ? `Pico: ${busiestDay}` : "Sem agenda na semana"} />
+        <DashboardMetric label="Atend. semana" value={`${completedWeek.length}`} detail={busiestDay ? `Pico: ${busiestDay}` : "Sem atendimentos concluídos"} />
         <DashboardMetric label="Livres hoje" value={`${freeSlotsToday}`} detail="janelas de 30 min" />
         <DashboardMetric label="Clientes fixos" value={`${recurringClients}`} detail={`${activeRecurring.length} horários recorrentes`} />
         <DashboardMetric label="Serviços ativos" value={`${services.filter((service) => service.active).length}`} detail={`${services.length} cadastrados`} />
@@ -74,14 +80,14 @@ export function AdminDashboardSection({
                 </View>
                 <View style={styles.dashboardListContent}>
                   <Text style={styles.cardTitle}>{item.service.name}</Text>
-                  <Text style={styles.cardText}>{item.count} vendas na semana</Text>
+                  <Text style={styles.cardText}>{item.count} atendimentos concluídos</Text>
                 </View>
                 <Text style={styles.price}>{money(item.revenue)}</Text>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.cardText}>Nenhum serviço vendido nos próximos 7 dias.</Text>
+          <Text style={styles.cardText}>Nenhum atendimento concluído nos últimos 7 dias.</Text>
         )}
       </View>
     </>
@@ -110,11 +116,14 @@ function countFreeSlotsToday(
     return 0;
   }
 
+  const scheduledBookings = bookingsToday.filter(
+    (booking) => booking.status === "SCHEDULED",
+  );
   const todayBlocks = blocks.filter((block) => block.date === todayDate);
   let free = 0;
   for (let cursor = toMinutes(hours.open); cursor + 30 <= toMinutes(hours.close); cursor += 30) {
     const interval = { start: toTime(cursor), end: toTime(cursor + 30) };
-    const busy = [...bookingsToday, ...todayBlocks].some((item) => overlaps(interval, item));
+    const busy = [...scheduledBookings, ...todayBlocks].some((item) => overlaps(interval, item));
     if (!busy) {
       free += 1;
     }
@@ -162,11 +171,26 @@ export function AdminMoreSection({ onTabChange, onLogout }: { onTabChange: (tab:
   );
 }
 
-export function AdminClientsSection({ clients, onAddClient }: { clients: Client[]; onAddClient: () => void }) {
+export function AdminClientsSection({
+  clients,
+  onOpenClient,
+  onRequestRemoveClient,
+}: {
+  clients: Client[];
+  onOpenClient: (client?: Client) => void;
+  onRequestRemoveClient: (client: Client) => void;
+}) {
   return (
     <>
-      <SectionTitle title="Clientes" action="Cadastrar" onPress={onAddClient} />
-      {clients.map((client) => <InfoRow key={client.id} title={client.name} detail={client.phone} icon="person" />)}
+      <SectionTitle title="Clientes" action="Cadastrar" onPress={() => onOpenClient()} />
+      {clients.map((client) => (
+        <ManagementCard key={client.id} title={client.name} detail={client.phone}>
+          <View style={styles.iconActionRow}>
+            <IconButton icon="pencil" onPress={() => onOpenClient(client)} />
+            <IconButton icon="trash" danger onPress={() => onRequestRemoveClient(client)} />
+          </View>
+        </ManagementCard>
+      ))}
     </>
   );
 }

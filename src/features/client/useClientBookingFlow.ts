@@ -32,10 +32,10 @@ export function useClientBookingFlow(options: Options) {
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
   const todayIso = new Date().toISOString().slice(0, 10);
   const upcomingAppointments = options.clientAppointments.filter(
-    (item) => (item.status === "pending" || item.status === "confirmed") && item.date >= todayIso,
+    (item) => item.status === "SCHEDULED" && item.date >= todayIso,
   );
   const historyAppointments = options.clientAppointments.filter(
-    (item) => item.status === "completed" || item.status === "cancelled" || item.date < todayIso,
+    (item) => item.status !== "SCHEDULED" || item.date < todayIso,
   );
   const selectedAppointments = appointmentView === "upcoming" ? upcomingAppointments : historyAppointments;
   const draftService = options.services.find((item) => item.id === bookingServiceId) ?? null;

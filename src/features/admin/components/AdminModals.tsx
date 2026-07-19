@@ -33,13 +33,14 @@ function buildStartOptions(open: string, close: string, duration: number) {
   return slots;
 }
 
-type BaseModalProps = {
+export type BaseModalProps = {
   visible: boolean;
   onClose: () => void;
 };
 
 export function ClientModal({
   visible,
+  editingClientId,
   name,
   phone,
   onChangeName,
@@ -47,6 +48,7 @@ export function ClientModal({
   onConfirm,
   onClose,
 }: BaseModalProps & {
+  editingClientId: string | null;
   name: string;
   phone: string;
   onChangeName: (value: string) => void;
@@ -62,7 +64,9 @@ export function ClientModal({
     >
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Cadastrar cliente</Text>
+          <Text style={styles.modalTitle}>
+            {editingClientId ? "Editar cliente" : "Cadastrar cliente"}
+          </Text>
           <ScrollView
             showsVerticalScrollIndicator={false}
             style={styles.modalScroll}
@@ -93,7 +97,9 @@ export function ClientModal({
               <Text style={styles.secondaryButtonText}>Cancelar</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.primaryButton} onPress={onConfirm}>
-              <Text style={styles.primaryButtonText}>Cadastrar</Text>
+              <Text style={styles.primaryButtonText}>
+                {editingClientId ? "Salvar" : "Cadastrar"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

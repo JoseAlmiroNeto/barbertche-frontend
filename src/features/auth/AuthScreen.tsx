@@ -10,9 +10,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Segmented } from "../components/common";
-import { privacyPolicy, termsOfUse } from "../content/legal";
-import { palette, styles } from "../theme";
+import { Segmented } from "../../components/common";
+import { privacyPolicy, termsOfUse } from "./legal";
+import { palette, styles } from "../../theme";
 
 const appLogo = require("../../assets/logo.png");
 

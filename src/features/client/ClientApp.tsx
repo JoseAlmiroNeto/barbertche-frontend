@@ -15,7 +15,7 @@ import type {
   GalleryItem,
   Product,
   Service,
-} from "../types";
+} from "../../types";
 import {
   BottomTabs,
   Chip,
@@ -25,20 +25,20 @@ import {
   HeroCard,
   SectionTitle,
   Segmented,
-} from "../components/common";
+} from "../../components/common";
 import {
   AppointmentCard,
   AvailabilitySummary,
-  GalleryCarousel,
-  GalleryGrid,
-  ProductCarousel,
-  ProductList,
-  ProfilePanel,
-} from "../components/domain";
-import { styles } from "../theme";
-import { dateLabel } from "../utils/date";
-import { money } from "../utils/time";
-import { useClientBookingFlow } from "../features/client/useClientBookingFlow";
+} from "../appointments/AppointmentComponents";
+import { GalleryCarousel, GalleryGrid } from "../gallery/GalleryComponents";
+import { ProductCarousel, ProductList } from "../products/ProductComponents";
+import { ProfilePanel } from "./ProfilePanel";
+import type { NotificationPreferences, NotificationPreferencesUpdate } from "../notifications/notifications.api";
+import { styles } from "../../theme";
+import { dateLabel, weekdayOf } from "../../utils/date";
+import { money } from "../../utils/time";
+
+type AppointmentView = "upcoming" | "history";
 
 export function ClientApp({
   tab,
@@ -59,6 +59,9 @@ export function ClientApp({
   onRescheduleAppointment,
   savingAppointment,
   onLogout,
+  notificationPreferences,
+  notificationPreferencesLoading,
+  onNotificationPreferencesChange,
   onAdmin,
 }: {
   tab: ClientTab;
@@ -86,21 +89,105 @@ export function ClientApp({
   ) => boolean | void | Promise<boolean | void>;
   savingAppointment?: boolean;
   onLogout: () => void;
+  notificationPreferences: NotificationPreferences;
+  notificationPreferencesLoading: boolean;
+  onNotificationPreferencesChange: (changes: NotificationPreferencesUpdate) => void;
   onAdmin: () => void;
 }) {
-  const flow = useClientBookingFlow({
-    tab, services, dateOptions, availableSlots, clientAppointments,
-    businessHours, closedDates, savingAppointment, onTabChange, onDateChange,
-    onServiceChange, onBookSlot, onCancelAppointment, onRescheduleAppointment,
+  const [appointmentView, setAppointmentView] =
+    useState<AppointmentView>("upcoming");
+  const [bookingServiceId, setBookingServiceId] = useState<string | null>(null);
+  const [bookingDate, setBookingDate] = useState<string | null>(null);
+  const [bookingSlot, setBookingSlot] = useState<string | null>(null);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const upcomingAppointments = clientAppointments.filter(
+    (appointment) =>
+      appointment.status === "SCHEDULED" && appointment.date >= todayIso,
+  );
+  const historyAppointments = clientAppointments.filter(
+    (appointment) =>
+      appointment.status !== "SCHEDULED" || appointment.date < todayIso,
+  );
+  const selectedAppointments =
+    appointmentView === "upcoming" ? upcomingAppointments : historyAppointments;
+  const draftService =
+    services.find((service) => service.id === bookingServiceId) ?? null;
+  const canShowSlots = Boolean(draftService && bookingDate);
+  const visibleAvailableSlots = canShowSlots ? availableSlots : [];
+  const openDateOptions = dateOptions.filter((date) => {
+    const hours = businessHours[weekdayOf(date)];
+    return Boolean(hours) && !closedDates.includes(date);
   });
-  const {
-    appointmentView, setAppointmentView, bookingServiceId, bookingDate,
-    bookingSlot, setBookingSlot, confirmVisible, setConfirmVisible,
-    reschedulingId, cancelTarget, setCancelTarget, todayIso, upcomingAppointments,
-    selectedAppointments, draftService, visibleAvailableSlots, openDateOptions,
-    bottomActiveTab, startNewBooking, startReschedule, repeatAppointment, handleServiceSelect,
-    handleDateSelect, confirmBooking, confirmCancelAppointment,
-  } = flow;
+  const bottomActiveTab =
+    tab === "book" ? "mine" : tab === "gallery" ? "home" : tab;
+
+  function startNewBooking() {
+    setReschedulingId(null);
+    setBookingServiceId(null);
+    setBookingDate(null);
+    setBookingSlot(null);
+    setConfirmVisible(false);
+    onTabChange("book");
+  }
+
+  function startReschedule(appointment: Appointment) {
+    setReschedulingId(appointment.id);
+    setBookingServiceId(appointment.serviceId);
+    setBookingDate(null);
+    setBookingSlot(null);
+    setConfirmVisible(false);
+    onServiceChange(appointment.serviceId);
+    onTabChange("book");
+  }
+
+  function handleServiceSelect(serviceId: string) {
+    setBookingServiceId(serviceId);
+    setBookingSlot(null);
+    onServiceChange(serviceId);
+  }
+
+  function handleDateSelect(date: string) {
+    setBookingDate(date);
+    setBookingSlot(null);
+    onDateChange(date);
+  }
+
+  async function confirmBooking() {
+    if (!bookingSlot || !bookingDate || savingAppointment) {
+      return;
+    }
+
+    const success = reschedulingId
+      ? await onRescheduleAppointment(reschedulingId, bookingDate, bookingSlot)
+      : await onBookSlot(bookingSlot);
+
+    if (success === false) {
+      return;
+    }
+
+    setConfirmVisible(false);
+    setReschedulingId(null);
+    setBookingSlot(null);
+    setAppointmentView("upcoming");
+    onTabChange("mine");
+  }
+
+  async function confirmCancelAppointment() {
+    if (!cancelTarget || savingAppointment) {
+      return;
+    }
+
+    const success = await onCancelAppointment(cancelTarget.id);
+    if (success === false) {
+      return;
+    }
+
+    setCancelTarget(null);
+    setAppointmentView("upcoming");
+  }
 
   return (
     <>
@@ -271,14 +358,7 @@ export function ClientApp({
                 appointment={appointment}
                 services={services}
                 actions={
-                  appointmentView === "history"
-                    ? [
-                        {
-                          label: "Agendar novamente",
-                          onPress: () => repeatAppointment(appointment),
-                        },
-                      ]
-                    : appointment.status === "confirmed" &&
+                  appointment.status === "SCHEDULED" &&
                   appointment.date >= todayIso &&
                   appointment.source !== "recurring"
                     ? [
@@ -318,6 +398,9 @@ export function ClientApp({
             <ProfilePanel
               name={currentClient.name}
               phone={currentClient.phone}
+              notificationPreferences={notificationPreferences}
+              notificationPreferencesLoading={notificationPreferencesLoading}
+              onNotificationPreferencesChange={onNotificationPreferencesChange}
               onLogout={onLogout}
             />
             <SectionTitle title="Histórico de cortes" />

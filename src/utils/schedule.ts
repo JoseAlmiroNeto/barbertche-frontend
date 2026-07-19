@@ -30,7 +30,7 @@ export function getBookingsForDate(
   services: Service[],
   clients: Client[]
 ) {
-  const regular = appointments.filter((appointment) => appointment.date === date && appointment.status === "confirmed");
+  const regular = appointments.filter((appointment) => appointment.date === date);
   const generated = recurring
     .filter((item) => item.active && item.weekday === weekdayOf(date))
     .map((item) => {
@@ -44,7 +44,7 @@ export function getBookingsForDate(
         clientId: item.clientId,
         clientName: client?.name ?? "Cliente recorrente",
         serviceId: item.serviceId,
-        status: "confirmed" as AppointmentStatus,
+        status: "SCHEDULED" as AppointmentStatus,
         source: "recurring" as const
       };
     });
@@ -81,7 +81,7 @@ export function canUseSlot(params: {
   const busy = [
     ...getBookingsForDate(params.date, params.appointments, params.recurring, params.services, params.clients),
     ...blockedIntervals(params.date, params.blocks)
-  ];
+  ].filter((item) => !("status" in item) || item.status === "SCHEDULED");
   return !busy.some((item) => overlaps(interval, item));
 }
 

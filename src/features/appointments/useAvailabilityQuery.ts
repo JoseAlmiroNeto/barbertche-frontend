@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiRequest } from "../../services/api";
+import { getAvailability } from "./appointments.api";
 
 export const availabilityKeys = {
   all: ["appointments", "availability"] as const,
@@ -17,11 +17,7 @@ type Options = {
 export function useAvailabilityQuery({ token, date, serviceId, enabled }: Options) {
   return useQuery({
     queryKey: availabilityKeys.byDateAndService(date, serviceId),
-    queryFn: () =>
-      apiRequest<string[]>(
-        `/appointments/availability?date=${encodeURIComponent(date)}&serviceId=${encodeURIComponent(serviceId)}`,
-        { token: token ?? undefined },
-      ),
+    queryFn: () => getAvailability(token!, date, serviceId),
     enabled: enabled && Boolean(token && serviceId),
   });
 }

@@ -1,14 +1,8 @@
 ﻿import { StatusBar } from "expo-status-bar";
-import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Header } from "../components/common";
-import {
-  availabilityKeys,
-  useAvailabilityQuery,
-} from "../features/appointments/useAvailabilityQuery";
-import { RootNavigator } from "../navigation/RootNavigator";
 import {
   businessHours as initialBusinessHours,
   closedDates as initialClosedDates,
@@ -20,52 +14,42 @@ import {
   initialRecurring,
   initialServices,
 } from "../data/mockData";
-import { AdminApp } from "../screens/AdminApp";
-import { AuthScreen, type AuthMode } from "../screens/AuthScreen";
-import { ClientApp } from "../screens/ClientApp";
+import { AdminApp } from "../features/admin/AdminApp";
+import { AuthScreen, type AuthMode } from "../features/auth/AuthScreen";
+import { ClientApp } from "../features/client/ClientApp";
 import {
-  createClient as createClientRequest,
   createAppointment as createAppointmentRequest,
-  createClosedDate as createClosedDateRequest,
-  createGalleryItem as createGalleryItemRequest,
-  createManualBlock as createManualBlockRequest,
-  createProduct as createProductRequest,
+  getAvailability as getAvailabilityRequest,
   createRecurringBooking as createRecurringBookingRequest,
-  createService as createServiceRequest,
   deleteAppointment as deleteAppointmentRequest,
-  deleteClosedDate as deleteClosedDateRequest,
-  deleteGalleryItem as deleteGalleryItemRequest,
-  deleteProduct as deleteProductRequest,
   deleteRecurringBooking as deleteRecurringBookingRequest,
-  deleteService as deleteServiceRequest,
   rescheduleAppointment as rescheduleAppointmentRequest,
-  updateBusinessHour as updateBusinessHourRequest,
-  updateGalleryItem as updateGalleryItemRequest,
-  updateProduct as updateProductRequest,
+  updateAppointmentStatus as updateAppointmentStatusRequest,
   updateRecurringBooking as updateRecurringBookingRequest,
-  updateService as updateServiceRequest,
-} from "../services/adminApi";
+} from "../features/appointments/appointments.api";
+import { createManualBlock as createManualBlockRequest, deleteManualBlock as deleteManualBlockRequest } from "../features/settings/settings.api";
+import { useAdminCatalogActions } from "../features/admin/useAdminCatalogActions";
+import { getAuthenticatedUser as getAuthenticatedUserRequest, login as loginRequest, logout as logoutRequest, register as registerRequest, removePushToken as removePushTokenRequest } from "../features/auth/auth.api";
+import type { AuthResponse, AuthUser } from "../features/auth/auth.types";
+import { setSessionExpiredHandler } from "../services/api";
 import {
-  apiRequest,
-  refreshSession,
-  setUnauthorizedHandler,
-  setTokenRefreshedHandler,
-  type AuthResponse,
-  type AuthUser,
-} from "../services/api";
-import {
-  clearStoredAuthToken,
-  storeAuthTokens,
-} from "../services/authStorage";
+  clearStoredAuthSession,
+  getStoredAuthToken,
+  getStoredPushToken,
+  getStoredRefreshToken,
+  storeAuthSession,
+} from "../features/auth/auth.storage";
+import { useNotificationSettings } from "../features/notifications/useNotificationSettings";
 import {
   loadAppData,
   loadClientAppData,
   type AppData,
-} from "../services/appData";
+} from "../features/app-data/appData.api";
 import { styles } from "../theme";
 import type {
   AdminTab,
   Appointment,
+  AppointmentStatus,
   BusinessHours,
   ClientTab,
   GalleryItem,
@@ -83,15 +67,8 @@ import {
   serviceById,
 } from "../utils/schedule";
 import { notify } from "./notify";
-import {
-  cancelAppointmentNotifications,
-  initializeNotifications,
-  persistPushToken,
-  scheduleAppointmentNotifications,
-} from "../services/notifications";
 
 export function AppContainer() {
-  const queryClient = useQueryClient();
   const [logged, setLogged] = useState(false);
   const [authInitializing, setAuthInitializing] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
@@ -119,52 +96,82 @@ export function AppContainer() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [authClientId, setAuthClientId] = useState<string | null>(null);
+  const [clientAvailableSlots, setClientAvailableSlots] = useState<string[]>(
+    [],
+  );
+  const [availabilityVersion, setAvailabilityVersion] = useState(0);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const notificationSettings = useNotificationSettings(authToken, logged);
+  const adminCatalog = useAdminCatalogActions({
+    requireToken: requireAuthToken,
+    startAction,
+    finishAction,
+    setClients,
+    setServices,
+    setProducts,
+    setGallery,
+    setBusinessHours,
+    setClosedDates,
+  });
 
   const isSaving = Boolean(pendingAction);
   const authenticatedClient = authClientId
     ? (clients.find((client) => client.id === authClientId) ?? null)
     : null;
-  const selectedService = serviceById(services, selectedServiceId);
-  const availabilityQuery = useAvailabilityQuery({
-    token: authToken,
-    date: selectedDate,
-    serviceId: selectedService.id,
-    enabled: logged && role === "client",
-  });
-  const clientAvailableSlots = availabilityQuery.data ?? [];
+  const activeServices = useMemo(
+    () => services.filter((service) => service.active),
+    [services],
+  );
+  const selectedService = serviceById(activeServices, selectedServiceId);
   const dateOptions = useMemo(
     () => Array.from({ length: 10 }, (_, index) => isoForOffset(index)),
     [],
   );
 
   useEffect(() => {
+    setSessionExpiredHandler(resetAuthState);
     void restoreStoredSession();
-    void initializeNotifications().catch(() => undefined);
+
+    return () => setSessionExpiredHandler(null);
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => {
-      void signOut(false);
-      notify("Sessão expirada", "Entre novamente para continuar.");
-    });
-    setTokenRefreshedHandler(setAuthToken);
-    return () => {
-      setUnauthorizedHandler(null);
-      setTokenRefreshedHandler(null);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (availabilityQuery.error) {
-      notify(
-        "Disponibilidade indisponivel",
-        availabilityQuery.error instanceof Error
-          ? availabilityQuery.error.message
-          : "Nao foi possivel carregar os horarios livres.",
-      );
+    if (!logged || role !== "client" || !authToken || !selectedService.id) {
+      setClientAvailableSlots([]);
+      return;
     }
-  }, [availabilityQuery.error]);
+
+    let active = true;
+    setClientAvailableSlots([]);
+    void getAvailabilityRequest(authToken, selectedDate, selectedService.id)
+      .then((slots) => {
+        if (active) {
+          setClientAvailableSlots(slots);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setClientAvailableSlots([]);
+          notify(
+            "Disponibilidade indisponivel",
+            error instanceof Error
+              ? error.message
+              : "Nao foi possivel carregar os horarios livres.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    authToken,
+    availabilityVersion,
+    logged,
+    role,
+    selectedDate,
+    selectedService.id,
+  ]);
 
   const bookingsForSelectedDate = readBookingsForDate(selectedDate);
   const availableSlots =
@@ -172,11 +179,18 @@ export function AppContainer() {
       ? clientAvailableSlots
       : readAvailableSlots(selectedDate, selectedService);
   const clientAppointments = authenticatedClient
-    ? dateOptions
-        .flatMap((date) => readBookingsForDate(date))
-        .filter(
+    ? [
+        ...appointments.filter(
           (appointment) => appointment.clientId === authenticatedClient.id,
-        )
+        ),
+        ...dateOptions
+          .flatMap((date) => readBookingsForDate(date))
+          .filter(
+            (appointment) =>
+              appointment.source === "recurring" &&
+              appointment.clientId === authenticatedClient.id,
+          ),
+      ]
         .sort((a, b) =>
           `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`),
         )
@@ -229,7 +243,7 @@ export function AppContainer() {
   }
 
   function refreshClientAvailability() {
-    void queryClient.invalidateQueries({ queryKey: availabilityKeys.all });
+    setAvailabilityVersion((current) => current + 1);
   }
 
   async function bookSlot(
@@ -282,9 +296,6 @@ export function AppContainer() {
       setAppointments((current) => [...current, appointment]);
       if (!manualClient) {
         refreshClientAvailability();
-        void scheduleAppointmentNotifications(appointment, service).catch(
-          () => undefined,
-        );
       }
       notify(
         "Agendamento confirmado",
@@ -310,12 +321,12 @@ export function AppContainer() {
     }
 
     try {
-      await deleteAppointmentRequest(token, id);
+      const canceled = await deleteAppointmentRequest(token, id);
       setAppointments((current) =>
-        current.filter((appointment) => appointment.id !== id),
+        current.map((appointment) =>
+          appointment.id === id ? canceled : appointment,
+        ),
       );
-      void cancelAppointmentNotifications(id).catch(() => undefined);
-      refreshClientAvailability();
       notify("Agendamento cancelado", "O horário foi removido da agenda.");
       return true;
     } catch (error) {
@@ -380,9 +391,6 @@ export function AppContainer() {
       setAppointments((current) =>
         current.map((item) => (item.id === id ? updated : item)),
       );
-      void scheduleAppointmentNotifications(updated, service).catch(
-        () => undefined,
-      );
       refreshClientAvailability();
       notify(
         "Agendamento remarcado",
@@ -434,6 +442,30 @@ export function AppContainer() {
       finishAction();
     }
   }
+  async function removeManualBlock(id: string) {
+    const token = requireAuthToken();
+    if (!token || !startAction("remove-manual-block")) {
+      return false;
+    }
+
+    try {
+      await deleteManualBlockRequest(token, id);
+      setBlocks((current) => current.filter((block) => block.id !== id));
+      notify("Bloqueio removido", "O horário voltou a ficar disponível.");
+      return true;
+    } catch (error) {
+      notify(
+        "Erro ao remover bloqueio",
+        error instanceof Error
+          ? error.message
+          : "Não foi possível remover o bloqueio.",
+      );
+      return false;
+    } finally {
+      finishAction();
+    }
+  }
+
   async function addRecurring(
     clientId: string,
     serviceId: string,
@@ -530,316 +562,6 @@ export function AppContainer() {
     }
   }
 
-  async function addGalleryItem(title: string, image: string) {
-    const token = requireAuthToken();
-    if (!token || !startAction("save-gallery")) {
-      return false;
-    }
-
-    try {
-      const item = await createGalleryItemRequest(token, { title, image });
-      setGallery((current) => [item, ...current]);
-      notify("Imagem adicionada", `${item.title} foi adicionada ao portfolio.`);
-      return true;
-    } catch (error) {
-      notify(
-        "Erro ao salvar",
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel adicionar a imagem.",
-      );
-      return false;
-    } finally {
-      finishAction();
-    }
-  }
-
-  async function editGalleryItem(id: string, title: string, image: string) {
-    const token = requireAuthToken();
-    if (!token || !startAction("save-gallery")) {
-      return false;
-    }
-
-    try {
-      const item = await updateGalleryItemRequest(token, id, { title, image });
-      setGallery((current) =>
-        current.map((galleryItem) =>
-          galleryItem.id === id ? item : galleryItem,
-        ),
-      );
-      notify("Imagem atualizada", `${item.title} foi salva.`);
-      return true;
-    } catch (error) {
-      notify(
-        "Erro ao salvar",
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel editar a imagem.",
-      );
-      return false;
-    } finally {
-      finishAction();
-    }
-  }
-
-  async function removeGalleryItem(id: string) {
-    const token = requireAuthToken();
-    if (!token) {
-      return;
-    }
-
-    try {
-      await deleteGalleryItemRequest(token, id);
-      setGallery((current) => current.filter((item) => item.id !== id));
-      notify("Imagem removida", "A imagem foi removida do portfolio.");
-    } catch (error) {
-      notify(
-        "Erro ao remover",
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel remover a imagem.",
-      );
-    }
-  }
-
-  async function saveBusinessHour(
-    weekday: number,
-    hours: BusinessHours[number],
-  ) {
-    const token = requireAuthToken();
-    if (!token) {
-      return;
-    }
-
-    try {
-      const updated = await updateBusinessHourRequest(token, weekday, hours);
-      setBusinessHours(updated);
-    } catch (error) {
-      notify(
-        "Erro ao salvar horário",
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel salvar o expediente.",
-      );
-    }
-  }
-
-  async function addClosedDate(date: string) {
-    const token = requireAuthToken();
-    if (!token) {
-      return;
-    }
-
-    try {
-      const updated = await createClosedDateRequest(token, date);
-      setClosedDates(updated);
-      notify("Fechamento cadastrado", "A data não aparecerá para clientes.");
-    } catch (error) {
-      notify(
-        "Erro ao cadastrar fechamento",
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel cadastrar o fechamento.",
-      );
-    }
-  }
-
-  async function removeClosedDate(date: string) {
-    const token = requireAuthToken();
-    if (!token) {
-      return;
-    }
-
-    try {
-      const updated = await deleteClosedDateRequest(token, date);
-      setClosedDates(updated);
-      notify(
-        "Fechamento removido",
-        "A data voltou a seguir o expediente configurado.",
-      );
-    } catch (error) {
-      notify(
-        "Erro ao remover fechamento",
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel remover o fechamento.",
-      );
-    }
-  }
-
-  async function createClient(name: string, phone: string) {
-    const token = requireAuthToken();
-    if (!token) {
-      return;
-    }
-
-    try {
-      const client = await createClientRequest(token, name, phone);
-      setClients((current) => [...current, client]);
-      notify("Cliente cadastrado", `${client.name} foi adicionado.`);
-    } catch (error) {
-      notify(
-        "Erro ao cadastrar",
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel cadastrar o cliente.",
-      );
-    }
-  }
-
-  async function createService(name: string, price: number, duration: number) {
-    const token = requireAuthToken();
-    if (!token || !startAction("save-service")) {
-      return false;
-    }
-
-    try {
-      const service = await createServiceRequest(token, {
-        name,
-        price,
-        duration,
-        active: true,
-      });
-      setServices((current) => [...current, service]);
-      notify("Serviço cadastrado", `${service.name} foi adicionado.`);
-      return true;
-    } catch (error) {
-      notify(
-        "Erro ao salvar serviço",
-        error instanceof Error
-          ? error.message
-          : "Não foi possível cadastrar o serviço.",
-      );
-      return false;
-    } finally {
-      finishAction();
-    }
-  }
-  async function editService(
-    id: string,
-    payload: { name: string; price: number; duration: number },
-  ) {
-    const token = requireAuthToken();
-    if (!token || !startAction("save-service")) {
-      return false;
-    }
-
-    try {
-      const service = await updateServiceRequest(token, id, payload);
-      setServices((current) =>
-        current.map((item) => (item.id === id ? service : item)),
-      );
-      notify("Serviço atualizado", `${service.name} foi salvo.`);
-      return true;
-    } catch (error) {
-      notify(
-        "Erro ao salvar serviço",
-        error instanceof Error
-          ? error.message
-          : "Não foi possível editar o serviço.",
-      );
-      return false;
-    } finally {
-      finishAction();
-    }
-  }
-  async function removeService(id: string) {
-    const token = requireAuthToken();
-    if (!token || !startAction("remove-service")) {
-      return false;
-    }
-
-    try {
-      await deleteServiceRequest(token, id);
-      setServices((current) => current.filter((service) => service.id !== id));
-      notify("Serviço excluído", "O serviço foi removido.");
-      return true;
-    } catch (error) {
-      notify(
-        "Erro ao excluir serviço",
-        error instanceof Error
-          ? error.message
-          : "Não foi possível excluir o serviço.",
-      );
-      return false;
-    } finally {
-      finishAction();
-    }
-  }
-  async function createProduct(name: string, price: number, image?: string) {
-    const token = requireAuthToken();
-    if (!token || !startAction("save-product")) {
-      return false;
-    }
-
-    try {
-      const product = await createProductRequest(token, name, price, image);
-      setProducts((current) => [...current, product]);
-      notify("Produto cadastrado", `${product.name} foi adicionado.`);
-      return true;
-    } catch (error) {
-      notify(
-        "Erro ao salvar produto",
-        error instanceof Error
-          ? error.message
-          : "Não foi possível cadastrar o produto.",
-      );
-      return false;
-    } finally {
-      finishAction();
-    }
-  }
-  async function editProduct(
-    id: string,
-    payload: Partial<Pick<Product, "name" | "price" | "available" | "image">>,
-  ) {
-    const token = requireAuthToken();
-    if (!token || !startAction("save-product")) {
-      return false;
-    }
-
-    try {
-      const product = await updateProductRequest(token, id, payload);
-      setProducts((current) =>
-        current.map((item) => (item.id === id ? product : item)),
-      );
-      notify("Produto atualizado", `${product.name} foi salvo.`);
-      return true;
-    } catch (error) {
-      notify(
-        "Erro ao salvar produto",
-        error instanceof Error
-          ? error.message
-          : "Não foi possível editar o produto.",
-      );
-      return false;
-    } finally {
-      finishAction();
-    }
-  }
-  async function removeProduct(id: string) {
-    const token = requireAuthToken();
-    if (!token || !startAction("remove-product")) {
-      return false;
-    }
-
-    try {
-      await deleteProductRequest(token, id);
-      setProducts((current) => current.filter((product) => product.id !== id));
-      notify("Produto excluído", "O produto foi removido da loja.");
-      return true;
-    } catch (error) {
-      notify(
-        "Erro ao excluir produto",
-        error instanceof Error
-          ? error.message
-          : "Não foi possível excluir o produto.",
-      );
-      return false;
-    } finally {
-      finishAction();
-    }
-  }
   function requireAuthToken() {
     if (!authToken) {
       notify("Sessão expirada", "Entre novamente para salvar no servidor.");
@@ -851,14 +573,20 @@ export function AppContainer() {
 
   async function restoreStoredSession() {
     try {
-      const token = await refreshSession();
-      const response = await apiRequest<{ user: AuthUser }>("/auth/me", { token });
-      await applyAuthResponse(
-        { ...response, accessToken: token, refreshToken: "" },
-        { persistToken: false },
-      );
+      const [token, refreshToken] = await Promise.all([
+        getStoredAuthToken(),
+        getStoredRefreshToken(),
+      ]);
+      if (!token || !refreshToken) {
+        await clearStoredAuthSession();
+        return;
+      }
+
+      const response = await getAuthenticatedUserRequest(token);
+      const currentToken = (await getStoredAuthToken()) ?? token;
+      await applyAuthenticatedUser(response.user, currentToken);
     } catch {
-      await clearStoredAuthToken();
+      await clearStoredAuthSession();
       resetAuthState();
     } finally {
       setAuthInitializing(false);
@@ -866,14 +594,26 @@ export function AppContainer() {
   }
 
   async function signOut(showMessage = false) {
-    if (authToken) {
-      await apiRequest("/auth/logout", {
-        method: "POST",
-        token: authToken,
-      }).catch(() => undefined);
+    const [storedToken, pushToken] = await Promise.all([
+      getStoredAuthToken(),
+      getStoredPushToken(),
+    ]);
+    const token = storedToken ?? authToken;
+    if (token) {
+      if (pushToken) {
+        try {
+          await removePushTokenRequest(token, pushToken);
+        } catch {
+          // O logout também remove os tokens vinculados à sessão no servidor.
+        }
+      }
+      try {
+        await logoutRequest(token);
+      } catch {
+        // A sessão local deve ser encerrada mesmo se o servidor estiver indisponível.
+      }
     }
-    await clearStoredAuthToken();
-    queryClient.clear();
+    await clearStoredAuthSession();
     resetAuthState();
     if (showMessage) {
       notify("Sessão encerrada", "Você saiu da sua conta.");
@@ -883,6 +623,8 @@ export function AppContainer() {
   function resetAuthState() {
     setAuthToken(null);
     setAuthClientId(null);
+    setClientAvailableSlots([]);
+    setAvailabilityVersion(0);
     setLogged(false);
     setRole("client");
     setClientTab("home");
@@ -918,29 +660,22 @@ export function AppContainer() {
           return;
         }
 
-        const response = await apiRequest<AuthResponse>("/auth/register", {
-          method: "POST",
-          body: JSON.stringify({
-            name,
-            phone,
-            email,
-            password,
-            passwordConfirmation,
-            termsAccepted: true,
-          }),
+        const response = await registerRequest({
+          name,
+          phone,
+          email,
+          password,
+          passwordConfirmation,
+          termsAccepted,
         });
         await applyAuthResponse(response);
         return;
       }
 
-      const response = await apiRequest<AuthResponse>("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await loginRequest({ email, password });
       await applyAuthResponse(response);
     } catch (error) {
-      await clearStoredAuthToken();
-      resetAuthState();
+      await signOut(false);
       notify(
         "Acesso negado",
         error instanceof Error
@@ -952,49 +687,78 @@ export function AppContainer() {
     }
   }
 
-  async function applyAuthResponse(
-    response: AuthResponse,
-    options: { persistToken?: boolean } = {},
-  ) {
-    const nextRole = response.user.role === "ADMIN" ? "admin" : "client";
+  async function applyAuthResponse(response: AuthResponse) {
+    await storeAuthSession(response.accessToken, response.refreshToken);
+    await applyAuthenticatedUser(response.user, response.accessToken);
+  }
 
-    if (nextRole === "client" && !response.user.client) {
+  async function updateAppointmentStatus(
+    id: string,
+    status: AppointmentStatus,
+  ) {
+    const token = requireAuthToken();
+    if (!token || !startAction("appointment-status")) {
+      return false;
+    }
+
+    try {
+      const updated = await updateAppointmentStatusRequest(token, id, status);
+      setAppointments((current) =>
+        current.map((appointment) =>
+          appointment.id === id ? updated : appointment,
+        ),
+      );
+      refreshClientAvailability();
+      notify("Status atualizado", "O agendamento foi atualizado com sucesso.");
+      return true;
+    } catch (error) {
+      notify(
+        "Erro ao atualizar status",
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atualizar o agendamento.",
+      );
+      return false;
+    } finally {
+      finishAction();
+    }
+  }
+
+  async function applyAuthenticatedUser(user: AuthUser, token: string) {
+    const nextRole = user.role === "ADMIN" ? "admin" : "client";
+
+    if (nextRole === "client" && !user.client) {
       throw new Error("Seu usuario ainda nao esta vinculado a um cliente.");
     }
 
-    if (options.persistToken !== false) {
-      await storeAuthTokens(response.accessToken, response.refreshToken);
-    }
-
-    setAuthToken(response.accessToken);
-    setAuthClientId(response.user.client?.id ?? null);
+    setAuthToken(token);
+    setAuthClientId(user.client?.id ?? null);
     setRole(nextRole);
 
-    if (response.user.client) {
+    if (user.client) {
       setClients((current) => {
         const exists = current.some(
-          (client) => client.id === response.user.client?.id,
+          (client) => client.id === user.client?.id,
         );
         if (exists) {
           return current.map((client) =>
-            client.id === response.user.client?.id
-              ? response.user.client
+            client.id === user.client?.id
+              ? user.client
               : client,
           );
         }
-        return [response.user.client, ...current].filter(
+        return [user.client, ...current].filter(
           Boolean,
         ) as typeof current;
       });
-      setName(response.user.client.name);
-      setPhone(response.user.client.phone);
+      setName(user.client.name);
+      setPhone(user.client.phone);
     } else {
-      setName(response.user.name);
-      setPhone(response.user.phone ?? "");
+      setName(user.name);
+      setPhone(user.phone ?? "");
     }
 
-    await loadInitialData(response.accessToken, nextRole, response.user);
-    void persistPushToken(response.accessToken).catch(() => undefined);
+    await loadInitialData(token, nextRole, user);
     setPassword("");
     setPasswordConfirmation("");
     setTermsAccepted(false);
@@ -1012,9 +776,6 @@ export function AppContainer() {
           ? await loadClientAppData(token, user)
           : await loadAppData(token);
       applyAppData(data);
-      if (data.warnings.length > 0) {
-        notify("Conteúdo parcialmente carregado", data.warnings.join("\n"));
-      }
     } catch (error) {
       notify(
         nextRole === "client" ? "Sessao invalida" : "Dados locais",
@@ -1039,10 +800,10 @@ export function AppContainer() {
     setGallery(data.gallery);
     setProducts(data.products);
 
-    const firstServiceId = data.services[0]?.id;
-    if (firstServiceId) {
-      setSelectedServiceId(firstServiceId);
-    }
+    const firstActiveServiceId = data.services.find(
+      (service) => service.active,
+    )?.id;
+    setSelectedServiceId(firstActiveServiceId ?? "");
   }
 
   return (
@@ -1054,11 +815,8 @@ export function AppContainer() {
             <ActivityIndicator color="#e9bd63" size="large" />
             <Text style={styles.loadingText}>Conectando à barbearia...</Text>
           </View>
-        ) : (
-          <RootNavigator
-            logged={logged}
-            role={role}
-            authScreen={<AuthScreen
+        ) : !logged ? (
+          <AuthScreen
             mode={authMode}
             name={name}
             phone={phone}
@@ -1075,10 +833,12 @@ export function AppContainer() {
             onTermsAcceptedChange={setTermsAccepted}
             submitting={authSubmitting}
             onSubmit={submitLogin}
-          />}
-            clientScreen={<View style={styles.appShell}>
+          />
+        ) : (
+          <View style={styles.appShell}>
             <Header role={role} />
-            {authenticatedClient ? (
+            {role === "client" ? (
+              authenticatedClient ? (
                 <ClientApp
                   tab={clientTab}
                   currentClient={authenticatedClient}
@@ -1101,6 +861,9 @@ export function AppContainer() {
                   onRescheduleAppointment={rescheduleAppointment}
                   savingAppointment={isSaving}
                   onLogout={() => void signOut(true)}
+                  notificationPreferences={notificationSettings.preferences}
+                  notificationPreferencesLoading={notificationSettings.loading}
+                  onNotificationPreferencesChange={(changes) => void notificationSettings.update(changes)}
                   onAdmin={() => undefined}
                 />
               ) : (
@@ -1110,10 +873,8 @@ export function AppContainer() {
                     Carregando seu perfil...
                   </Text>
                 </View>
-              )}
-          </View>}
-            adminScreen={<View style={styles.appShell}>
-              <Header role={role} />
+              )
+            ) : (
               <AdminApp
                 tab={adminTab}
                 selectedDate={selectedDate}
@@ -1135,30 +896,36 @@ export function AppContainer() {
                   bookSlot(start, clientName, serviceId)
                 }
                 onManualBlock={addManualBlock}
-                onAddClient={createClient}
-                onAddService={createService}
-                onUpdateService={editService}
-                onRemoveService={removeService}
+                onRemoveManualBlock={removeManualBlock}
+                onAddClient={adminCatalog.addClient}
+                onUpdateClient={adminCatalog.editClient}
+                onRemoveClient={adminCatalog.removeClient}
+                onAddService={adminCatalog.addService}
+                onUpdateService={adminCatalog.editService}
+                onRemoveService={adminCatalog.removeService}
                 onAddRecurring={addRecurring}
                 onUpdateRecurring={editRecurring}
                 onRemoveRecurring={removeRecurring}
-                onAddGalleryItem={addGalleryItem}
-                onUpdateGalleryItem={editGalleryItem}
-                onRemoveGalleryItem={removeGalleryItem}
-                onAddProduct={createProduct}
-                onUpdateProduct={editProduct}
-                onRemoveProduct={removeProduct}
+                onAddGalleryItem={adminCatalog.addGalleryItem}
+                onUpdateGalleryItem={adminCatalog.editGalleryItem}
+                onRemoveGalleryItem={(id) => void adminCatalog.removeGalleryItem(id)}
+                onAddProduct={adminCatalog.addProduct}
+                onUpdateProduct={adminCatalog.editProduct}
+                onRemoveProduct={adminCatalog.removeProduct}
                 onEditBusinessHours={setBusinessHours}
-                onSaveBusinessHour={saveBusinessHour}
-                onAddClosedDate={addClosedDate}
-                onRemoveClosedDate={removeClosedDate}
+                onSaveBusinessHour={(weekday, hours) => void adminCatalog.saveBusinessHour(weekday, hours)}
+                onAddClosedDate={(date) => void adminCatalog.addClosedDate(date)}
+                onRemoveClosedDate={(date) => void adminCatalog.removeClosedDate(date)}
+                onUpdateAppointmentStatus={updateAppointmentStatus}
                 saving={isSaving}
                 onLogout={() => void signOut(true)}
               />
-            </View>}
-          />
+            )}
+          </View>
         )}
       </SafeAreaView>
     </SafeAreaProvider>
   );
 }
+
+

@@ -1,0 +1,43 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+        with:
+          path: barbertche-frontend
+      - name: Checkout backend contract
+        uses: actions/checkout@v4
+        with:
+          repository: JoseAlmiroNeto/barbertche-backend
+          path: barbertche-backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            barbertche-frontend/package-lock.json
+            barbertche-backend/package-lock.json
+      - run: npm ci
+        working-directory: barbertche-backend
+      - run: npm ci
+        working-directory: barbertche-frontend
+      - run: npm run openapi:generate
+        working-directory: barbertche-backend
+        env:
+          DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+          DIRECT_URL: postgresql://unused:unused@localhost:5432/unused
+          JWT_SECRET: ci-secret-with-at-least-32-characters
+          JWT_REFRESH_SECRET: ci-refresh-secret-with-at-least-32-characters
+      - run: npm run api:generate
+        working-directory: barbertche-frontend
+      - name: Verificar divergência do contrato tipado
+        run: git diff --exit-code -- src/generated/api-types.ts
+        working-directory: barbertche-frontend
+      - run: npm run check-types
+        working-directory: barbertche-frontend
+      - run: npm run test:ci
+        working-directory: barbertche-frontend

@@ -5,6 +5,7 @@ node_modules/
 .expo/
 dist/
 web-build/
+coverage/
 
 # Native build outputs
 android/.gradle/
@@ -24,6 +25,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
+
+# Private signing and push credentials
+credentials.json
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+firebase-adminsdk-*.json
+firebase-service-account*.json
 
 # OS and editor files
 .DS_Store
